@@ -76,14 +76,16 @@ await page.addInitScript(() => {
       const role = btn.tagName === "A" ? "link" : btn.getAttribute("role") || "button";
       return { role, name, exact: true };
     }
+    // Plain elements: only worth recording if they have a short label of their own (e.g. a custom dropdown option).
     const text = el.textContent.trim().replace(/\s+/g, " ");
-    if (text && text.length < 40) return { text, exact: true };
-    return { css: el.tagName.toLowerCase() };
+    if (text && text.length < 40 && el.children.length <= 2) return { text, exact: true };
+    return null; // a click on empty space / a background — nothing to replay
   };
   addEventListener("click", (e) => {
     const el = e.target;
     if (el.matches("input, textarea")) return; // typing is recorded below
-    window.__tk_rec({ action: "click", target: describe(el) });
+    const target = describe(el);
+    if (target) window.__tk_rec({ action: "click", target });
   }, true);
   addEventListener("input", (e) => {
     const el = e.target;

@@ -68,6 +68,11 @@ try {
         await sleep(a.ms);
         continue;
       }
+      // Clicks on the page background (recorded by older versions of `record`) do nothing — skip them.
+      if (a.target?.css && /^(html|body)$/i.test(a.target.css.trim())) {
+        console.warn(`  ↷ ${step.title}: skipped a click on "${a.target.css}" (empty space)`);
+        continue;
+      }
       const loc = find(a.target).first();
       try {
         await loc.waitFor({ state: "visible", timeout: 15000 });
