@@ -213,6 +213,7 @@ const Tutorial = React.lazy(() => import("./viewer/Tutorial").then((m) => ({ def
 | `npm run record -- <Component> [name]` | Record on a component from `src/components/` |
 | `npm run capture -- <name>` | Replay `tutorials/<name>.tutorial.json` and write `public/recordings/<name>.json` |
 | `npm run typecheck` | TypeScript check |
+| `npm run test:recorder` | Self-test: records a custom dropdown with a real mouse and replays it |
 
 Viewer URL: `http://localhost:5180/?t=<name>`
 
@@ -263,7 +264,8 @@ The capture viewport is 1280×720 (`VIEWPORT` in `scripts/lib.mjs`).
 | Nothing recorded in URL mode | You didn't press Alt+R after logging in. |
 | Images/fonts missing in the viewer | The recording loads them from your app's URL — keep the app running, or serve it where viewers can reach it. |
 | Component mode: blank page | The component needs providers — wrap it in `src/harness.tsx`. Check `harness.html?c=Name` directly. |
-| Alt+N / Alt+R do nothing | Click inside the page first so it has keyboard focus. |
+| Alt+N / Alt+R do nothing | Click inside the page first so it has keyboard focus. On a Mac use ⌥ Option. |
+| `couldn't find {"text":"<option>"}` after a dropdown | The click that *opened* the dropdown wasn't captured (recorded before the dropdown fix, or skipped as `body`). Re-record, or add `{ "action": "click", "target": { "role": "combobox", "name": "<field label>" } }` before the option click. |
 
 ## Real data, privacy & safety
 

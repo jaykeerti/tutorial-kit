@@ -5,10 +5,11 @@
 //
 // In the Chrome window that opens:
 //   • log in first if needed (in URL mode the login is saved to .auth/ and reused by capture)
-//   • press Alt+N to start a new step
+//   • press Alt+R (Mac: Option+R) to start recording, Alt+N (Mac: Option+N) for a new step
 //   • close the window when you're done
 // Your actions are saved to tutorials/<name>.tutorial.json — rename the steps, then run capture.
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { authFileFor, openTarget, parseArgs, settle } from "./lib.mjs";
 
 const { url, component, name } = parseArgs(process.argv.slice(2));
@@ -51,52 +52,8 @@ await page.exposeBinding("__tk_rec", (src, a) => {
   console.log("  recorded", JSON.stringify(a));
 });
 
-// Runs inside the page: listens to the user and describes each element in a human, stable way.
-await page.addInitScript(() => {
-  const labelOf = (el) => {
-    if (el.id) {
-      const l = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-      if (l) return l.textContent.trim();
-    }
-    return el.getAttribute("aria-label") || el.closest("label")?.textContent.trim() || null;
-  };
-  const describe = (el) => {
-    const tagged = el.closest("[data-testid]");
-    if (tagged) return { testId: tagged.dataset.testid };
-    if (el.matches("input, textarea, select")) {
-      const label = labelOf(el);
-      if (label) return { label };
-      if (el.placeholder) return { css: `[placeholder="${el.placeholder}"]` };
-      if (el.name) return { css: `${el.tagName.toLowerCase()}[name="${el.name}"]` };
-    }
-    const btn = el.closest("button, a, [role=button], [role=tab], [role=menuitem]");
-    if (btn) {
-      // Keep the full visible text: with exact matching, "New ticket" won't find "+ New ticket".
-      const name = (btn.getAttribute("aria-label") || btn.textContent || "").trim().replace(/\s+/g, " ");
-      const role = btn.tagName === "A" ? "link" : btn.getAttribute("role") || "button";
-      return { role, name, exact: true };
-    }
-    // Plain elements: only worth recording if they have a short label of their own (e.g. a custom dropdown option).
-    const text = el.textContent.trim().replace(/\s+/g, " ");
-    if (text && text.length < 40 && el.children.length <= 2) return { text, exact: true };
-    return null; // a click on empty space / a background — nothing to replay
-  };
-  addEventListener("click", (e) => {
-    const el = e.target;
-    if (el.matches("input, textarea")) return; // typing is recorded below
-    const target = describe(el);
-    if (target) window.__tk_rec({ action: "click", target });
-  }, true);
-  addEventListener("input", (e) => {
-    const el = e.target;
-    if (el.matches("input, textarea") && el.type !== "password") window.__tk_rec({ action: "type", target: describe(el), text: el.value });
-  }, true);
-  addEventListener("keydown", (e) => {
-    // Use the physical key (e.code): on a Mac, Option+R types "®", so e.key is never "r".
-    if (e.altKey && e.code === "KeyN") window.__tk_rec({ action: "newStep" });
-    if (e.altKey && e.code === "KeyR") window.__tk_rec({ action: "start" });
-  }, true);
-});
+// The in-page listener lives in recorder-client.js (also used by scripts/test-recorder.mjs).
+await page.addInitScript({ path: fileURLToPath(new URL("./recorder-client.js", import.meta.url)) });
 
 await settle(page, pageUrl);
 if (url) {
