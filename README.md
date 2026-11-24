@@ -7,7 +7,7 @@ like the "how it works" sections on product sites — without screen recording a
  ┌───────────────────────────┐     ┌──────────────────────────┐     ┌─────────────────────────┐
  │  record                   │ ──▶ │  recording .json         │ ──▶ │  <Tutorial /> page      │
  │  you click through it;    │     │  the page as HTML, split │     │  Remotion plays it with │
- │  rrweb films the page     │     │  into steps, pauses cut  │     │  a smooth cursor        │
+ │  rrweb films the page     │     │  into steps, pauses cut  │     │  cursor, zoom, captions │
  └───────────────────────────┘     └──────────────────────────┘     └─────────────────────────┘
 ```
 
@@ -22,7 +22,7 @@ like the "how it works" sections on product sites — without screen recording a
 - [Quick start (demo)](#quick-start-demo)
 - [Use it on your own app](#use-it-on-your-own-app)
 - [Keyboard shortcuts while recording](#keyboard-shortcuts-while-recording)
-- [Step titles](#step-titles)
+- [Step titles and captions](#step-titles-and-captions)
 - [Show the tutorial in your React app](#show-the-tutorial-in-your-react-app)
 - [Commands](#commands)
 - [Real data, privacy & safety](#real-data-privacy--safety)
@@ -38,7 +38,7 @@ like the "how it works" sections on product sites — without screen recording a
 |---|---|---|
 | **Record** | Playwright + rrweb | Opens Chrome. You do the task once. rrweb records the page **as you use it** — every DOM change (structure + styles, not pixels). Your clicks are noted too (where, and when you pressed Alt+N for a new step). Images and fonts are embedded. |
 | **Tidy** | automatic | Everything before Alt+R is dropped. The session is split into steps. **Pauses are cut**: while you think or the app loads, the tutorial skips ahead, so it moves at a steady pace. Output: `public/recordings/<name>.json`. |
-| **Play** | Remotion | For every video frame, rrweb rebuilds the page *exactly as it was at that moment*. A smooth cursor glides between your clicks, with click ripples. Step cards, progress bars and auto-advance come from `<Tutorial />`. |
+| **Play** | Remotion | For every video frame, rrweb rebuilds the page *exactly as it was at that moment*. A smooth cursor glides between your clicks, with click ripples; the view **zooms in** around each click (and while you type), and a **caption** says what's happening (*Click “Save”*, *Type “Widget” in Part name*). Step cards, progress bars and auto-advance come from `<Tutorial />`. |
 
 **Nothing is replayed.** The tutorial shows what really happened while you clicked, so it works with any
 widget — MUI dropdowns, autocompletes, dependent fields, dialogs — because it only watches.
@@ -86,7 +86,7 @@ In the Chrome window that opens:
 
 You get:
 - `public/recordings/create-ticket.json` — the tutorial
-- `tutorials/create-ticket.tutorial.json` — step titles to edit (see [Step titles](#step-titles))
+- `tutorials/create-ticket.tutorial.json` — step titles and captions to edit (see [Step titles and captions](#step-titles-and-captions))
 - `.auth/localhost_3000.json` — your saved login, reused next time (**keep private**)
 
 **3. View** — `npm run dev` → `http://localhost:5180/?t=create-ticket`
@@ -111,14 +111,43 @@ Options: `--mask-inputs` hides everything typed into fields; `--no-inline-assets
 
 Click inside the page first so it has keyboard focus. The shortcuts never type into fields.
 
-## Step titles
+## Step titles and captions
 
-Steps are called "Step 1", "Step 2"… at first. Edit the `title` and `description` of each step in
-`tutorials/<name>.tutorial.json`, then:
+Steps are called "Step 1", "Step 2"… at first, and every action gets a caption made from what you did
+(`Click “Save”`, `Type “Widget” in Part name`, `Choose “High”`). In `tutorials/<name>.tutorial.json`, edit each
+step's `title` and `description`, and each action's `caption` (set it to `""` to hide that one), then:
 
 ```bash
 npm run titles -- <name>
 ```
+
+The same file has a `settings` block for the look of the tutorial — also applied by `npm run titles`
+(recording the tutorial again keeps it):
+
+```json
+"settings": {
+  "zoom": 1.8,
+  "captions": true,
+  "colors": {
+    "accent": "#7c3aed",
+    "click": "#7c3aed",
+    "cursor": "#111111",
+    "captionBg": "rgba(17, 17, 27, 0.86)",
+    "captionText": "#ffffff"
+  }
+}
+```
+
+| Setting | Values |
+|---|---|
+| `zoom` | `false` = no zoom, `true` = default, or a level from `1` to `4` (e.g. `1.5`) |
+| `captions` | `true` / `false` |
+| `colors.accent` | step cards: active border, number, progress bar |
+| `colors.click` | click ripple |
+| `colors.cursor` | cursor arrow |
+| `colors.captionBg`, `colors.captionText` | caption box and text |
+
+Any CSS color works (`"#2563eb"`, `"rgb(37 99 235)"`, `"teal"`). Unknown or invalid values are reported and ignored.
 
 ---
 
@@ -127,7 +156,7 @@ npm run titles -- <name>
 The viewer is one component: `src/viewer/Tutorial.tsx`.
 
 1. In your app: `npm i remotion @remotion/player rrweb` (keep all `remotion` / `@remotion/*` versions identical).
-2. Copy `src/viewer/` (`Tutorial.tsx`, `Tutorial.css`, `RrwebClip.tsx`, `time.ts`, `types.ts`) into your app.
+2. Copy `src/viewer/` (`Tutorial.tsx`, `Tutorial.css`, `RrwebClip.tsx`, `settings.ts`, `time.ts`, `types.ts`) into your app.
 3. Copy the recording JSON into your app's `public/` folder.
 4. Use it:
 
@@ -135,6 +164,9 @@ The viewer is one component: `src/viewer/Tutorial.tsx`.
 import { Tutorial } from "./viewer/Tutorial";
 
 <Tutorial src="/recordings/create-ticket.json" />
+
+// Override the tutorial file's settings for this page (any of them):
+<Tutorial src="/recordings/create-ticket.json" zoom={false} captions={false} colors={{ accent: "#2563eb", click: "#2563eb" }} />
 ```
 
 Load it lazily so Remotion (~500 KB) only downloads when needed:
@@ -153,7 +185,7 @@ const Tutorial = React.lazy(() => import("./viewer/Tutorial").then((m) => ({ def
 | `npm run dev` | Viewer + harness at `http://localhost:5180` |
 | `npm run record -- --url <url> <name>` | Record a tutorial on your running app |
 | `npm run record -- <Component> [name]` | Record on a component from `src/components/` |
-| `npm run titles -- <name>` | Apply step titles from `tutorials/<name>.tutorial.json` |
+| `npm run titles -- <name>` | Apply titles, captions and settings from `tutorials/<name>.tutorial.json` |
 | `npm run capture -- <name> [--watch] [--safe]` | Optional robot replay — see [below](#optional-robot-replay-capture) |
 | `npm run test:recorder` | Self-test on the fixtures |
 | `npm run typecheck` | TypeScript check |
@@ -314,7 +346,7 @@ tutorial-kit/
 ## Roadmap
 
 - [ ] Cut out a mistake without recording again
-- [ ] Highlight box / caption overlay per step, zoom to the click
+- [ ] Highlight box around the clicked element
 - [ ] MP4 / WebM export of each step
 - [ ] New-tab support
 - [ ] Publish as an npm package (`npx tutorial-kit record …`)

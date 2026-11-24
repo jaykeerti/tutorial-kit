@@ -13,7 +13,7 @@
 // Options:  --mask-inputs  hide everything typed into fields
 //           --no-inline-assets  don't embed images/fonts (smaller file, but needs access to your app to look right)
 import fs from "node:fs";
-import { authFileFor, openTarget, parseArgs, scriptSteps, settle } from "./lib.mjs";
+import { DEFAULT_SETTINGS, authFileFor, checkSettings, openTarget, parseArgs, scriptSteps, settle } from "./lib.mjs";
 import { attachSession, buildRecording } from "./session.mjs";
 
 const argv = process.argv.slice(2);
@@ -52,7 +52,16 @@ if (url) {
   }
 }
 
-const built = await buildRecording({ ...session, source: url ?? component, inline: !argv.includes("--no-inline-assets") });
+// Recording the same tutorial again keeps your settings (zoom, captions, colors).
+const scriptFile = `tutorials/${name}.tutorial.json`;
+let settings = DEFAULT_SETTINGS;
+try {
+  const old = JSON.parse(fs.readFileSync(scriptFile, "utf8"));
+  const kept = checkSettings(old.settings).settings;
+  settings = { ...DEFAULT_SETTINGS, ...kept, colors: { ...DEFAULT_SETTINGS.colors, ...kept.colors } };
+} catch {}
+
+const built = await buildRecording({ ...session, source: url ?? component, settings, inline: !argv.includes("--no-inline-assets") });
 await close();
 
 if (!built) {
@@ -65,15 +74,14 @@ fs.mkdirSync("public/recordings", { recursive: true });
 const recFile = `public/recordings/${name}.json`;
 fs.writeFileSync(recFile, built.json);
 
-// …and a small editable file with the step titles (and the actions, for the optional robot replay).
+// …and a small editable file: settings, step titles and captions (+ the actions, for the optional robot replay).
 const steps = state.steps();
-const scriptFile = `tutorials/${name}.tutorial.json`;
 fs.mkdirSync("tutorials", { recursive: true });
-fs.writeFileSync(scriptFile, JSON.stringify({ ...(url ? { url: state.startUrl ?? url, auth } : { component }), steps: scriptSteps(steps) }, null, 2));
+fs.writeFileSync(scriptFile, JSON.stringify({ ...(url ? { url: state.startUrl ?? url, auth } : { component }), settings, steps: scriptSteps(steps) }, null, 2));
 
 const { info } = built;
 console.log(
   `\n✅ Saved ${recFile}  (${info.steps} steps, ${info.seconds.toFixed(0)} s after cutting pauses, ${info.inlined} images/fonts embedded, ${(fs.statSync(recFile).size / 1024).toFixed(0)} KB)`,
 );
 console.log(`   View it:      npm run dev  →  http://localhost:5180/?t=${name}`);
-console.log(`   Step titles:  edit ${scriptFile}, then  npm run titles -- ${name}`);
+console.log(`   Titles, captions, zoom, colors:  edit ${scriptFile}, then  npm run titles -- ${name}`);

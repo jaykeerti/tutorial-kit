@@ -1,7 +1,8 @@
 // npm run titles -- <tutorial-name>
-// Copies the step titles and descriptions from tutorials/<name>.tutorial.json into
-// public/recordings/<name>.json, so you can rename steps without recording again.
+// Applies what you edited in tutorials/<name>.tutorial.json — step titles, descriptions, captions
+// and settings (zoom, captions, colors) — to public/recordings/<name>.json. No need to record again.
 import fs from "node:fs";
+import { checkSettings } from "./lib.mjs";
 
 const name = process.argv.slice(2).find((a) => !a.startsWith("--"));
 if (!name) {
@@ -26,7 +27,19 @@ rec.steps.forEach((s, i) => {
   if (!from) return;
   s.title = from.title;
   s.description = from.description ?? "";
+  // Captions: matched to the actions in order. Set "caption": "" to hide one.
+  (s.captions ?? []).forEach((c, j) => {
+    const a = from.actions?.[j];
+    if (a && typeof a.caption === "string") c.text = a.caption;
+  });
 });
+// Settings: zoom, captions, colors.
+const { settings, problems } = checkSettings(script.settings);
+for (const p of problems) console.warn(`⚠ settings: ${p}`);
+if (Object.keys(settings).length) rec.settings = settings;
+else delete rec.settings;
+
 fs.writeFileSync(recFile, JSON.stringify(rec));
 rec.steps.forEach((s, i) => console.log(`  ${String(i + 1).padStart(2, "0")}  ${s.title}${s.description ? ` — ${s.description}` : ""}`));
+if (rec.settings) console.log(`  settings: zoom ${JSON.stringify(rec.settings.zoom ?? "default")}, captions ${JSON.stringify(rec.settings.captions ?? "default")}${rec.settings.colors && Object.keys(rec.settings.colors).length ? `, colors ${JSON.stringify(rec.settings.colors)}` : ""}`);
 console.log(`Updated ${recFile}`);

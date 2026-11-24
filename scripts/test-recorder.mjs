@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 import { chromium } from "playwright-core";
-import { createRecorderState, openTarget, settle } from "./lib.mjs";
+import { createRecorderState, openTarget, scriptSteps, settle } from "./lib.mjs";
 import { attachSession, buildRecording } from "./session.mjs";
 
 let failed = 0;
@@ -186,6 +186,7 @@ try {
     await click(p.getByRole("button", { name: "Submit" }));
     await p.waitForTimeout(500);
     const built = await buildRecording({ ...session, source: "TestBench" });
+    const r_steps = session.state.steps();
     await t.close();
 
     check(!!built, "recording built from the session");
@@ -199,6 +200,8 @@ try {
     const cut = s1 ? s1.end - s1.start - s1.timeline.at(-1)[0] : 0;
     check(cut > 2500, `the 4-second pause was cut (${(cut / 1000).toFixed(1)} s removed from step 1)`);
     check(!rec.events.some((e) => e.type === 3 && e.data?.source === 1), "raw mouse movements dropped (viewer draws its own cursor)");
+    const caps = rec.steps.flatMap((x) => x.captions ?? []);
+    check(caps.some((c) => c.text === "Click “Add part”") && caps.some((c) => c.text === "Type “Widget” in Part name" && c.until > c.t), "captions made from the actions (typing has an end time)");
     check(json.includes("data:image/svg+xml;base64"), "image embedded");
     check(!json.includes("jane.doe@example.com"), "data-private text masked");
 
@@ -206,6 +209,23 @@ try {
     fs.mkdirSync("public/recordings", { recursive: true });
     fs.writeFileSync("public/recordings/_film.json", json);
     temp.push("public/recordings/_film.json");
+
+    // Edit the tutorial file (title, a caption, settings) and apply it with npm run titles.
+    const script = { component: "TestBench", settings: { zoom: false, colors: { accent: "#16a34a", click: "#dc2626", bogus: "x" } }, steps: scriptSteps(r_steps) };
+    script.steps[0].title = "Add a part";
+    script.steps[0].actions[0].caption = "Open the Add part dialog";
+    writeTutorial("_film", script);
+    const applied = await new Promise((resolve) => {
+      let out = "";
+      const pr = spawn(process.execPath, ["scripts/titles.mjs", "_film"]);
+      pr.stdout.on("data", (d) => (out += d));
+      pr.stderr.on("data", (d) => (out += d));
+      pr.on("exit", (code) => resolve({ ok: code === 0, out }));
+    });
+    const rec2 = JSON.parse(fs.readFileSync("public/recordings/_film.json", "utf8"));
+    check(applied.ok && rec2.steps[0].title === "Add a part" && rec2.steps[0].captions[0].text === "Open the Add part dialog", "npm run titles applies edited titles and captions");
+    check(rec2.settings?.zoom === false && rec2.settings?.colors?.click === "#dc2626" && !("bogus" in rec2.settings.colors), "settings applied (zoom off, colors), invalid ones dropped");
+    check(applied.out.includes('unknown color "bogus"'), "warns about an invalid setting");
     const server = await createServer({ server: { port: 5187, strictPort: true }, logLevel: "silent" });
     await server.listen();
     const browser = await chromium.launch({ channel: "chrome", headless: true });
@@ -216,6 +236,8 @@ try {
       const shows = (text, timeout) => frame.getByText(text).first().waitFor({ timeout }).then(() => true, () => false);
       check(await shows("Parts", 15000), "viewer shows the recorded page");
       check((await v.locator(".tk-step").count()) === 2, "viewer has 2 step cards");
+      check((await v.locator(".tk").getAttribute("style"))?.includes("#16a34a"), "accent color from the tutorial file used");
+      check(await v.locator(".tk-caption", { hasText: "Open the Add part dialog" }).first().waitFor({ timeout: 10000 }).then(() => true, () => false), "caption shown while playing");
       check(await shows("Nuts · urgent", 20000), "step 1 plays through to the saved part");
       await v.locator(".tk-step").nth(1).click();
       check(await shows("Page submits: 1", 20000), "step 2 plays through to the end");

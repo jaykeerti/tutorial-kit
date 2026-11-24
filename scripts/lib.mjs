@@ -184,6 +184,7 @@ export function createRecorderState({ recordingFromStart, log = console.log }) {
     // Typing into the same field again: keep only the final text.
     if (a.action === "type" && prev?.action === "type" && same(prev.target, a.target)) {
       prev.text = a.text;
+      prev.tsEnd = ts; // when typing finished (keeps the zoom and caption up while you type)
       lastTs = ts;
       return;
     }
@@ -214,6 +215,78 @@ export function createRecorderState({ recordingFromStart, log = console.log }) {
   };
 }
 
-/** Steps as written to tutorials/<name>.tutorial.json: titles + actions, without timing details. */
+/**
+ * Look-and-feel settings written into each tutorial file (edit, then `npm run titles`).
+ * Keep in step with DEFAULT_SETTINGS in src/viewer/settings.ts.
+ */
+export const DEFAULT_SETTINGS = {
+  zoom: 1.8,
+  captions: true,
+  colors: { accent: "#7c3aed", click: "#7c3aed", cursor: "#111111", captionBg: "rgba(17, 17, 27, 0.86)", captionText: "#ffffff" },
+};
+
+/** Check settings from a tutorial file; returns { settings, problems }. Unknown or invalid values are dropped. */
+export function checkSettings(input) {
+  const problems = [];
+  const settings = {};
+  if (input == null) return { settings, problems };
+  if (typeof input !== "object") return { settings, problems: ['"settings" should be an object'] };
+  for (const k of Object.keys(input)) if (!["zoom", "captions", "colors"].includes(k)) problems.push(`unknown setting "${k}" (ignored)`);
+  if ("zoom" in input) {
+    const z = input.zoom;
+    if (z === true || z === false || (typeof z === "number" && z >= 1 && z <= 4)) settings.zoom = z === 1 ? false : z;
+    else problems.push(`"zoom" should be true, false or a number from 1 to 4 (got ${JSON.stringify(z)})`);
+  }
+  if ("captions" in input) {
+    if (typeof input.captions === "boolean") settings.captions = input.captions;
+    else problems.push(`"captions" should be true or false`);
+  }
+  if ("colors" in input) {
+    settings.colors = {};
+    for (const [k, v] of Object.entries(input.colors || {})) {
+      if (!(k in DEFAULT_SETTINGS.colors)) problems.push(`unknown color "${k}" — use ${Object.keys(DEFAULT_SETTINGS.colors).join(", ")}`);
+      else if (typeof v !== "string" || !v.trim()) problems.push(`color "${k}" should be a CSS color like "#2563eb"`);
+      else settings.colors[k] = v.trim();
+    }
+  }
+  return { settings, problems };
+}
+
+/** Steps as written to tutorials/<name>.tutorial.json: titles + actions (with editable captions), without timing details. */
 export const scriptSteps = (steps) =>
-  steps.map(({ title, description, actions }) => ({ title, description, actions: actions.map(({ ts, at, ...a }) => a) }));
+  steps.map(({ title, description, actions }) => ({
+    title,
+    description,
+    actions: actions.map(({ ts, tsEnd, at, ...a }) => ({ caption: captionFor(a), ...a })),
+  }));
+
+const quote = (s, max = 40) => {
+  const t = String(s ?? "").trim();
+  return t ? `“${t.length > max ? `${t.slice(0, max - 1)}…` : t}”` : "";
+};
+
+/** A short caption for an action, e.g. Click “Save”, Type “Widget” in Part name. "" = no caption. */
+export function captionFor(a) {
+  const t = a.target || {};
+  const name = t.name ?? t.text ?? t.label ?? t.placeholder ?? t.testId ?? "";
+  const field = t.label ?? t.placeholder ?? t.name ?? "";
+  switch (a.action) {
+    case "click":
+      if (!name) return "";
+      if (t.role === "option" || t.role === "menuitem" || t.role === "radio") return `Choose ${quote(name)}`;
+      if (t.role === "checkbox" || t.role === "switch") return `Tick ${quote(name)}`;
+      if (t.role === "tab") return `Open the ${quote(name)} tab`;
+      if (t.role === "combobox" || t.label) return `Open ${quote(name)}`;
+      return `Click ${quote(name)}`;
+    case "type":
+      return `Type ${quote(a.text)}${field ? ` in ${field}` : ""}`;
+    case "select":
+      return `Choose ${quote(a.value)}${field ? ` in ${field}` : ""}`;
+    case "press":
+      return a.key === "Enter" ? "Press Enter" : a.key === "Escape" ? "Press Esc" : "";
+    case "upload":
+      return `Upload ${(a.files || []).join(", ") || "a file"}`;
+    default:
+      return "";
+  }
+}

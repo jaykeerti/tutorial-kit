@@ -2,7 +2,7 @@
 // session into a tutorial recording — split into steps, with long pauses cut out.
 // Nothing is replayed, so nothing has to be found again.
 import { fileURLToPath } from "node:url";
-import { VIEWPORT, collectAssets, createRecorderState, injectRecorder } from "./lib.mjs";
+import { VIEWPORT, captionFor, collectAssets, createRecorderState, injectRecorder } from "./lib.mjs";
 
 // Pacing of the finished tutorial (ms).
 const PACE = {
@@ -29,7 +29,7 @@ export async function attachSession(page, { recordingFromStart, log, mask, maskI
 }
 
 /** Turn the filmed session into the JSON the viewer plays. Returns null if nothing was recorded. */
-export async function buildRecording({ events, assets, state, source, inline = true }) {
+export async function buildRecording({ events, assets, state, source, settings, inline = true }) {
   const steps = state.steps();
   if (!steps.length || !events.length) return null;
   const all = [...events].sort((a, b) => a.timestamp - b.timestamp);
@@ -76,7 +76,9 @@ export async function buildRecording({ events, assets, state, source, inline = t
   const out = steps.map((s, i) => {
     const start = i === 0 ? begin : Math.max(begin, s.startTs ?? begin);
     const stop = i < steps.length - 1 ? Math.max(start, steps[i + 1].startTs ?? start) : Math.max(start, end);
-    return { title: s.title, description: s.description, start, end: stop, timeline: timeline(start, stop, busy) };
+    // One caption per action (same order as in the tutorial file, so they can be edited there).
+    const captions = s.actions.map((a) => ({ t: a.ts, ...(a.tsEnd ? { until: a.tsEnd } : {}), text: captionFor(a) }));
+    return { title: s.title, description: s.description, start, end: stop, timeline: timeline(start, stop, busy), captions };
   });
 
   // Where you clicked (for the smooth cursor), and when (for the ripples).
@@ -89,7 +91,7 @@ export async function buildRecording({ events, assets, state, source, inline = t
   let eventsJson = JSON.stringify(kept);
   let inlined = 0;
   if (inline) ({ json: eventsJson, count: inlined } = await assets.inline(eventsJson));
-  const doc = JSON.stringify({ viewport: VIEWPORT, source, mode: "filmed", pointer, clicks, steps: out, events: "__EVENTS__" });
+  const doc = JSON.stringify({ viewport: VIEWPORT, source, mode: "filmed", ...(settings ? { settings } : {}), pointer, clicks, steps: out, events: "__EVENTS__" });
   return {
     json: doc.replace('"__EVENTS__"', () => eventsJson),
     info: { events: kept.length, steps: out.length, inlined, seconds: out.reduce((n, s) => n + s.timeline.at(-1)[0], 0) / 1000 },

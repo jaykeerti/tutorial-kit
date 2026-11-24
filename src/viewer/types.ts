@@ -1,4 +1,5 @@
 import type { eventWithTime } from "rrweb";
+import type { SettingsInput } from "./settings";
 
 export type Step = {
   title: string;
@@ -7,6 +8,8 @@ export type Step = {
   end: number;
   /** [tutorialMs, realTimestamp] points — quiet gaps are squeezed. Missing = play in real time. */
   timeline?: [number, number][];
+  /** One per action, at the real time it happened (until = typing finished). Empty text = no caption. */
+  captions?: { t: number; until?: number; text: string }[];
 };
 
 export type Recording = {
@@ -20,4 +23,6 @@ export type Recording = {
   cursor?: { t: number; x: number; y: number }[];
   clicks: number[];
   steps: Step[];
+  /** From the tutorial file (npm run titles): zoom, captions, colors. */
+  settings?: SettingsInput;
 };

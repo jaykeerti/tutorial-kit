@@ -5,15 +5,15 @@
   border-radius: 12px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; font: inherit; color: inherit; overflow: hidden;
   transition: border-color .2s, box-shadow .2s;
 }
-.tk-step:hover { border-color: #ddd6fe; }
-.tk-step.active { border-color: #7c3aed; box-shadow: 0 8px 24px rgba(124, 58, 237, .15); }
+.tk-step:hover { border-color: color-mix(in srgb, var(--tk-accent, #7c3aed) 30%, white); }
+.tk-step.active { border-color: var(--tk-accent, #7c3aed); box-shadow: 0 8px 24px color-mix(in srgb, var(--tk-accent, #7c3aed) 15%, transparent); }
 .tk-num { font-size: 22px; font-weight: 800; color: #cbd5e1; line-height: 1.1; }
-.tk-step.active .tk-num { color: #7c3aed; }
+.tk-step.active .tk-num { color: var(--tk-accent, #7c3aed); }
 .tk-text { display: flex; flex-direction: column; gap: 4px; }
 .tk-text strong { font-size: 16px; }
 .tk-text span { font-size: 14px; color: #6b7280; line-height: 1.45; }
 .tk-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; }
-.tk-bar span { display: block; height: 100%; background: #7c3aed; transform-origin: left; }
+.tk-bar span { display: block; height: 100%; background: var(--tk-accent, #7c3aed); transform-origin: left; }
 .tk-player { border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px rgba(15, 23, 42, .18); border: 1px solid #e5e7eb; }
 .tk-loading, .tk-error { padding: 40px; text-align: center; color: #6b7280; }
 /* hide rrweb's built-in mouse; we draw our own */

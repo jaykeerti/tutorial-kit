@@ -3,13 +3,25 @@
 import { Player, PlayerRef } from "@remotion/player";
 import { useEffect, useRef, useState } from "react";
 import { RrwebClip } from "./RrwebClip";
+import { resolveSettings, type Colors } from "./settings";
 import { stepLength } from "./time";
 import type { Recording } from "./types";
 import "./Tutorial.css";
 
 const FPS = 30;
 
-export function Tutorial({ src }: { src: string }) {
+type TutorialProps = {
+  /** The recording JSON. */
+  src: string;
+  /** Zoom around clicks: false = off, true = default (1.8), or a level like 1.5. Overrides the tutorial file. */
+  zoom?: number | boolean;
+  /** Captions on/off. Overrides the tutorial file. */
+  captions?: boolean;
+  /** Colors (accent, click, cursor, captionBg, captionText). Overrides the tutorial file. */
+  colors?: Partial<Colors>;
+};
+
+export function Tutorial({ src, zoom, captions, colors }: TutorialProps) {
   const [rec, setRec] = useState<Recording | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
@@ -40,8 +52,11 @@ export function Tutorial({ src }: { src: string }) {
   if (error) return <p className="tk-error">Couldn't load tutorial: {error}. Did you run <code>npm run record</code>?</p>;
   if (!rec) return <div className="tk-loading">Loading tutorial…</div>;
 
+  // Props win over the tutorial file's settings, which win over the defaults.
+  const settings = resolveSettings(rec.settings, { zoom, captions, colors });
+
   return (
-    <section className="tk">
+    <section className="tk" style={{ ["--tk-accent" as string]: settings.colors.accent }}>
       <ol className="tk-steps">
         {rec.steps.map((s, i) => (
           <li key={i}>
@@ -63,7 +78,7 @@ export function Tutorial({ src }: { src: string }) {
           key={active}
           ref={playerRef}
           component={RrwebClip}
-          inputProps={{ rec, step: active }}
+          inputProps={{ rec, step: active, zoom: settings.zoom, captions: settings.captions, colors: settings.colors }}
           durationInFrames={frames(rec, active)}
           fps={FPS}
           compositionWidth={rec.viewport.width}

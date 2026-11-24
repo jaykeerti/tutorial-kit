@@ -8,6 +8,7 @@
     "capture": "node scripts/capture.mjs",
     "record": "node scripts/record.mjs",
     "titles": "node scripts/titles.mjs",
+    "apply": "node scripts/titles.mjs",
     "typecheck": "tsc --noEmit",
     "test:recorder": "node scripts/test-recorder.mjs"
   },
