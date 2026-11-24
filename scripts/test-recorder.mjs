@@ -56,15 +56,26 @@ try {
   {
     const r = await openRecorder("SelectDemo", 5183);
     await r.page.mouse.click(600, 600); // empty space — ignored
-    await r.humanClick(r.page.locator("[role=combobox]"));
+    await r.humanClick(r.page.locator("#env-select"));
     await r.humanClick(r.page.getByRole("option", { name: "Production" }));
     await r.humanClick(r.page.getByRole("button", { name: "Save" }));
+    // Autocomplete: click into the text box to open the list, pick an option without typing.
+    await r.humanClick(r.page.locator("#site"));
+    await r.humanClick(r.page.getByRole("option", { name: "AAG" }));
     await r.page.waitForTimeout(200);
     const acts = actionsOf(r.state);
-    check(acts.length === 3, `3 actions recorded, empty-space click ignored (got ${acts.length})`);
+    check(acts.length === 5, `5 actions recorded, empty-space click ignored (got ${acts.length})`);
     check(acts[0]?.target?.role === "combobox" && acts[0]?.target?.name === "Environment", "dropdown recorded as combobox 'Environment' (no *, no value)");
     check(acts[1]?.target?.role === "option" && acts[1]?.target?.name === "Production", "option recorded as 'Production'");
+    check(acts[3]?.action === "click" && JSON.stringify(acts[3]).includes("Site"), "click that opens an autocomplete is recorded");
+    check(acts[4]?.target?.name === "AAG", "autocomplete option 'AAG' recorded");
     await r.close();
+
+    writeTutorial("_select", { component: "SelectDemo", steps: [{ title: "Pick", description: "", actions: acts }] });
+    const c1 = await capture("_select");
+    const rec1 = fs.existsSync("public/recordings/_select.json") ? fs.readFileSync("public/recordings/_select.json", "utf8") : "";
+    check(c1.ok && rec1.includes("Saved: Production") && rec1.includes("Site: AAG"), "replay picks Production and the autocomplete option AAG");
+    if (!c1.ok) console.log(c1.out);
 
     writeTutorial("_old", {
       component: "SelectDemo",

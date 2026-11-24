@@ -170,7 +170,10 @@
       const label = el.closest("label");
       lastLabelClick = label?.control ? { control: label.control, t: Date.now() } : null;
 
-      if (el.matches(TEXT_INPUT) || el.closest("[contenteditable=''], [contenteditable=true]")) return; // typing is recorded separately
+      // Clicks into text boxes are normally just "put the cursor here" (typing is recorded separately) —
+      // except autocompletes (MUI Autocomplete etc.), where the click opens the list of options.
+      const opensList = el.matches("[role=combobox], [aria-autocomplete], [aria-haspopup=listbox], [aria-haspopup=true]");
+      if (!opensList && (el.matches(TEXT_INPUT) || el.closest("[contenteditable=''], [contenteditable=true]"))) return;
       if (el.matches("select, input[type=file]")) return; // recorded on change
       const d = describe(el);
       if (d) send({ action: "click", ...d });
