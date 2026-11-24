@@ -1,14 +1,15 @@
 // npm run capture -- <tutorial-name> [--watch] [--safe] [--no-inline-assets]
 //
-// Reads tutorials/<name>.tutorial.json, performs the steps for real in Chrome (Playwright),
-// records the page with rrweb, and writes public/recordings/<name>.json for the viewer.
+// OPTIONAL. `npm run record` already makes the recording by filming you. This instead has a robot
+// redo the steps in tutorials/<name>.tutorial.json and films the robot — e.g. to remake a tutorial
+// without clicking through it again. Overwrites public/recordings/<name>.json.
 //
 //   --watch             show the browser and slow down, to see where it gets stuck
 //   --safe              don't send changes to the server (POST/PUT/PATCH/DELETE get a fake 200 {})
 //   --no-inline-assets  don't embed images/fonts in the recording
 import fs from "node:fs";
 import path from "node:path";
-import { VIEWPORT, injectRecorder, openTarget, settle } from "./lib.mjs";
+import { VIEWPORT, collectAssets, injectRecorder, openTarget, settle } from "./lib.mjs";
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith("--")));
@@ -82,26 +83,7 @@ for (const r of rules) {
 }
 
 // ---- Collect images/fonts so the recording works without access to your app ---------------
-const assets = new Map();
-const pendingAssets = [];
-let assetBytes = 0;
-if (INLINE) {
-  page.on("response", (r) => {
-    const type = r.request().resourceType();
-    if (!["image", "font"].includes(type) || r.status() !== 200 || r.url().startsWith("data:")) return;
-    pendingAssets.push(
-      r
-        .body()
-        .then((b) => {
-          if (b.length > 2_000_000 || assetBytes + b.length > 20_000_000) return;
-          assetBytes += b.length;
-          const ct = (r.headers()["content-type"] || "").split(";")[0].trim() || (type === "font" ? "font/woff2" : "image/png");
-          assets.set(r.url(), `data:${ct};base64,${b.toString("base64")}`);
-        })
-        .catch(() => {}),
-    );
-  });
-}
+const assets = INLINE ? collectAssets(page) : null;
 
 // ---- Finding elements ---------------------------------------------------------------------
 const find = (t, root = page) => {
@@ -351,17 +333,7 @@ try {
   }
 
   await sleep(200); // let the last rrweb events arrive
-  await Promise.all(pendingAssets);
-
-  // Swap image/font URLs for embedded copies (longest URLs first so "a.png?v=2" isn't broken by "a.png").
-  let eventsJson = JSON.stringify(events);
-  let inlined = 0;
-  for (const [u, data] of [...assets].sort((a, b) => b[0].length - a[0].length)) {
-    if (eventsJson.includes(u)) {
-      eventsJson = eventsJson.split(u).join(data);
-      inlined++;
-    }
-  }
+  const { json: eventsJson, count: inlined } = assets ? await assets.inline(JSON.stringify(events)) : { json: JSON.stringify(events), count: 0 };
 
   fs.mkdirSync("public/recordings", { recursive: true });
   const out = `public/recordings/${name}.json`;

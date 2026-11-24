@@ -173,10 +173,17 @@
       // Clicks into text boxes are normally just "put the cursor here" (typing is recorded separately) —
       // except autocompletes (MUI Autocomplete etc.), where the click opens the list of options.
       const opensList = el.matches("[role=combobox], [aria-autocomplete], [aria-haspopup=listbox], [aria-haspopup=true]");
-      if (!opensList && (el.matches(TEXT_INPUT) || el.closest("[contenteditable=''], [contenteditable=true]"))) return;
+      if (!opensList && (el.matches(TEXT_INPUT) || el.closest("[contenteditable=''], [contenteditable=true]"))) {
+        if (e.detail > 0) send({ action: "point", at: { x: e.clientX, y: e.clientY } }); // so the cursor goes there
+        return;
+      }
       if (el.matches("select, input[type=file]")) return; // recorded on change
       const d = describe(el);
-      if (d) send({ action: "click", ...d });
+      if (!d) return;
+      // Where the mouse was (keyboard "clicks" have no position — use the element's centre).
+      const r = el.getBoundingClientRect();
+      const at = e.detail > 0 ? { x: e.clientX, y: e.clientY } : { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      send({ action: "click", ...d, at });
     },
     true,
   );
@@ -203,7 +210,8 @@
       const el = e.target;
       if (el.matches("select")) {
         const d = describe(el);
-        if (d) send({ action: "select", ...d, value: clean(el.selectedOptions[0]?.textContent) || el.value });
+        const r = el.getBoundingClientRect();
+        if (d) send({ action: "select", ...d, value: clean(el.selectedOptions[0]?.textContent) || el.value, at: { x: r.left + r.width / 2, y: r.top + r.height / 2 } });
       } else if (el.matches("input[type=file]")) {
         const d = describe(el);
         if (d) send({ action: "upload", ...d, files: [...el.files].map((f) => f.name) });
@@ -221,8 +229,11 @@
         e.stopPropagation();
         if (e.code === "KeyN") send({ action: "newStep" });
         else {
-          const dialogOpen = [...document.querySelectorAll("[role=dialog], [role=alertdialog]")].some(isVisible);
-          send({ action: "start", url: location.href, dialogOpen });
+          // Fresh snapshot of the page as it is right now — the recording starts here.
+          try {
+            window.rrweb?.record?.takeFullSnapshot?.(true);
+          } catch {}
+          send({ action: "start", url: location.href });
         }
         return;
       }

@@ -5,13 +5,39 @@ import React, { useLayoutEffect, useRef } from "react";
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { Replayer } from "rrweb";
 import "rrweb/dist/style.css";
-import type { Recording } from "./types";
+import { realAt, tutorialAt } from "./time";
+import type { Recording, Step } from "./types";
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 
-/** Cursor position at time t (ms), eased between recorded keyframes. */
+const GLIDE = 650; // ms the cursor takes to travel to the next click
+
+/**
+ * Filmed recordings: the cursor rests where you last clicked, then glides to the next click
+ * just before it happens. Times here are tutorial time (pauses already cut).
+ */
+const filmedCursorAt = (rec: Recording, s: Step, v: number) => {
+  const p = rec.pointer ?? [];
+  const before = p.filter((q) => q.t < s.start).at(-1);
+  let from = before ?? { x: rec.viewport.width / 2, y: rec.viewport.height * 0.6 };
+  let fromV = 0;
+  for (const q of p) {
+    if (q.t < s.start) continue;
+    if (q.t > s.end) break;
+    const qv = tutorialAt(s, q.t);
+    if (v <= qv) {
+      const k = interpolate(v, [Math.max(fromV, qv - GLIDE), qv], [0, 1], { ...clamp, easing: Easing.inOut(Easing.cubic) });
+      return { x: from.x + (q.x - from.x) * k, y: from.y + (q.y - from.y) * k };
+    }
+    from = q;
+    fromV = qv;
+  }
+  return from;
+};
+
+/** Robot recordings: cursor position at time t (ms), eased between recorded keyframes. */
 const cursorAt = (rec: Recording, t: number) => {
-  const c = rec.cursor;
+  const c = rec.cursor!;
   if (t <= c[0].t) return c[0];
   for (let i = 0; i < c.length - 1; i++) {
     const a = c[i];
@@ -33,7 +59,8 @@ export const RrwebClip: React.FC<{ rec: Recording; step: number }> = ({ rec, ste
 
   const s = rec.steps[step];
   const t0 = rec.events[0].timestamp;
-  const t = s.start + (frame / fps) * 1000; // absolute time in the recording
+  const v = (frame / fps) * 1000; // time in the tutorial
+  const t = realAt(s, v); // the moment in the recording to show
 
   // Build the rrweb replayer once per recording.
   useLayoutEffect(() => {
@@ -45,6 +72,10 @@ export const RrwebClip: React.FC<{ rec: Recording; step: number }> = ({ rec, ste
       showDebug: false,
       mouseTail: false,
       triggerFocus: true,
+      // We show each frame by pausing the replay at that moment, and rrweb freezes CSS animations
+      // while paused — rows that fade in would stay invisible, spinners still. Keep them running.
+      // (The id selector only raises specificity above rrweb's own rule.)
+      insertStyleRules: [".rrweb-paused *:not(#__tk), .rrweb-paused:not(#__tk) { animation-play-state: running !important; }"],
     });
     replayer.current = r;
     return () => {
@@ -59,8 +90,10 @@ export const RrwebClip: React.FC<{ rec: Recording; step: number }> = ({ rec, ste
     replayer.current?.pause(t - t0);
   }, [t, t0]);
 
-  const { x, y } = cursorAt(rec, t);
-  const pressed = rec.clicks.some((c) => t >= c && t < c + 160);
+  const { x, y } = rec.cursor ? cursorAt(rec, t) : filmedCursorAt(rec, s, v);
+  // Click times in tutorial time, for this step only.
+  const clicks = rec.clicks.filter((c) => c >= s.start && c <= s.end).map((c) => tutorialAt(s, c));
+  const pressed = clicks.some((c) => v >= c && v < c + 160);
   const fade = Math.min(interpolate(frame, [0, 6], [0, 1], clamp), interpolate(frame, [durationInFrames - 6, durationInFrames - 1], [1, 0], clamp));
 
   return (
@@ -69,8 +102,8 @@ export const RrwebClip: React.FC<{ rec: Recording; step: number }> = ({ rec, ste
       <div ref={host} className="tk-host" style={{ position: "absolute", left: 0, top: 0, width: rec.viewport.width, height: rec.viewport.height, overflow: "hidden" }} />
 
       {/* click ripples */}
-      {rec.clicks.map((c) => {
-        const dt = t - c;
+      {clicks.map((c) => {
+        const dt = v - c;
         if (dt < 0 || dt > 550) return null;
         return (
           <div

@@ -94,44 +94,87 @@ export async function injectRecorder(page, onEvent, options = {}) {
 }
 
 /**
+ * Collect the images and fonts the page loads, so recordings still look right without access
+ * to your app. Call inline(json) at the end to swap their URLs for embedded copies.
+ */
+export function collectAssets(page, { maxEach = 2_000_000, maxTotal = 20_000_000 } = {}) {
+  const assets = new Map();
+  const pending = [];
+  let bytes = 0;
+  page.on("response", (r) => {
+    const type = r.request().resourceType();
+    if (!["image", "font"].includes(type) || r.status() !== 200 || r.url().startsWith("data:")) return;
+    pending.push(
+      r
+        .body()
+        .then((b) => {
+          if (b.length > maxEach || bytes + b.length > maxTotal) return;
+          bytes += b.length;
+          const ct = (r.headers()["content-type"] || "").split(";")[0].trim() || (type === "font" ? "font/woff2" : "image/png");
+          assets.set(r.url(), `data:${ct};base64,${b.toString("base64")}`);
+        })
+        .catch(() => {}),
+    );
+  });
+  return {
+    /** Replace asset URLs in a JSON string (longest first, so "a.png?v=2" isn't broken by "a.png"). */
+    async inline(json) {
+      await Promise.all(pending);
+      let count = 0;
+      for (const [u, data] of [...assets].sort((a, b) => b[0].length - a[0].length)) {
+        if (json.includes(u)) {
+          json = json.split(u).join(data);
+          count++;
+        }
+      }
+      return { json, count };
+    },
+  };
+}
+
+/**
  * Turns the raw messages from recorder-client.js into tutorial steps:
  * handles start / restart / new step, merges typing, and drops duplicate clicks.
+ * Every action keeps its time (ts) and, for clicks, where the mouse was (at) — used to
+ * build the recording; stripped by scriptSteps() for the editable tutorial file.
  */
 export function createRecorderState({ recordingFromStart, log = console.log }) {
-  let steps = [{ title: "Step 1", description: "", actions: [] }];
+  let steps = [{ title: "Step 1", description: "", startTs: null, actions: [] }];
   let recording = recordingFromStart;
   let startUrl = null;
+  let startTs = null;
   let lastTs = 0;
+  let points = []; // mouse positions of clicks that aren't actions (e.g. into a text field)
 
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const key = (t) => t?.name ?? t?.text ?? t?.label ?? t?.testId ?? t?.placeholder ?? t?.css;
   const show = (a) => {
-    const { alts, ...rest } = a;
+    const { alts, ts, at, ...rest } = a;
     return JSON.stringify(rest);
   };
 
   const handle = (msg) => {
     const { ts = Date.now(), ...a } = msg;
     if (a.action === "start") {
-      if (recording && steps.some((s) => s.actions.length)) {
-        steps = [{ title: "Step 1", description: "", actions: [] }];
-        log("↺ Recording restarted — earlier actions discarded");
-      }
+      if (recording && steps.some((s) => s.actions.length)) log("↺ Recording restarted — earlier actions discarded");
+      steps = [{ title: "Step 1", description: "", startTs: ts, actions: [] }];
+      points = [];
       recording = true;
       startUrl = a.url;
+      startTs = ts;
       log(`● Recording started on ${a.url}`);
-      if (a.dialogOpen) {
-        log("⚠ A dialog/modal is open. Capture starts from the page URL, where it won't be open,");
-        log("  so the first steps would fail. Close it, then press Alt+R (Mac: Option+R) again to restart.");
-      }
       return;
     }
     if (!recording) return;
+    if (a.action === "point") {
+      points.push({ ts, at: a.at });
+      return;
+    }
 
     const cur = steps[steps.length - 1];
     if (a.action === "newStep") {
       if (cur.actions.length) {
-        steps.push({ title: `Step ${steps.length + 1}`, description: "", actions: [] });
+        steps.push({ title: `Step ${steps.length + 1}`, description: "", startTs: ts, actions: [] });
         log(`— Step ${steps.length} —`);
       }
       return;
@@ -149,7 +192,7 @@ export function createRecorderState({ recordingFromStart, log = console.log }) {
     // A Tab straight after typing just moves focus to the next field we'll click anyway.
     if (a.action === "press" && a.key === "Tab" && prev?.action === "type") return;
 
-    cur.actions.push(a);
+    cur.actions.push({ ...a, ts });
     lastTs = ts;
     log("  recorded", show(a));
   };
@@ -162,6 +205,15 @@ export function createRecorderState({ recordingFromStart, log = console.log }) {
     get startUrl() {
       return startUrl;
     },
+    /** When Alt+R was pressed (null in component mode, which records from the first moment). */
+    get startTs() {
+      return startTs;
+    },
     steps: () => steps.filter((s) => s.actions.length),
+    points: () => points,
   };
 }
+
+/** Steps as written to tutorials/<name>.tutorial.json: titles + actions, without timing details. */
+export const scriptSteps = (steps) =>
+  steps.map(({ title, description, actions }) => ({ title, description, actions: actions.map(({ ts, at, ...a }) => a) }));

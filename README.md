@@ -4,14 +4,14 @@ Turn a click-through of your React app into an animated, step-by-step tutorial �
 like the "how it works" sections on product sites — without screen recording and without an LLM.
 
 ```
- ┌──────────┐     ┌──────────────┐     ┌──────────────────┐     ┌─────────────────────┐
- │  record  │ ──▶ │ script .json │ ──▶ │     capture      │ ──▶ │  <Tutorial /> page  │
- │ (you     │     │ (steps, what │     │ (robot replays it│     │ (Remotion plays the │
- │  click)  │     │  to click)   │     │  + rrweb records)│     │  recording + cursor)│
- └──────────┘     └──────────────┘     └──────────────────┘     └─────────────────────┘
+ ┌───────────────────────────┐     ┌──────────────────────────┐     ┌─────────────────────────┐
+ │  record                   │ ──▶ │  recording .json         │ ──▶ │  <Tutorial /> page      │
+ │  you click through it;    │     │  the page as HTML, split │     │  Remotion plays it with │
+ │  rrweb films the page     │     │  into steps, pauses cut  │     │  a smooth cursor        │
+ └───────────────────────────┘     └──────────────────────────┘     └─────────────────────────┘
 ```
 
-> **Status: prototype.** Tested end-to-end on the demo components and on an MUI app. Expect rough edges.
+> **Status: prototype.** Expect rough edges.
 
 ---
 
@@ -21,19 +21,14 @@ like the "how it works" sections on product sites — without screen recording a
 - [Requirements](#requirements)
 - [Quick start (demo)](#quick-start-demo)
 - [Use it on your own app](#use-it-on-your-own-app)
-  - [Option A — your running app (URL mode)](#option-a--your-running-app-url-mode)
-  - [Option B — a single component (component mode)](#option-b--a-single-component-component-mode)
 - [Keyboard shortcuts while recording](#keyboard-shortcuts-while-recording)
-- [The script file](#the-script-file)
-- [Capture options](#capture-options)
+- [Step titles](#step-titles)
 - [Show the tutorial in your React app](#show-the-tutorial-in-your-react-app)
 - [Commands](#commands)
-- [What it handles for you](#what-it-handles-for-you)
-- [Troubleshooting](#troubleshooting)
 - [Real data, privacy & safety](#real-data-privacy--safety)
+- [Optional: robot replay (capture)](#optional-robot-replay-capture)
 - [Project layout](#project-layout)
 - [Known limits](#known-limits)
-- [Roadmap](#roadmap)
 
 ---
 
@@ -41,9 +36,12 @@ like the "how it works" sections on product sites — without screen recording a
 
 | Stage | Tool | What happens |
 |---|---|---|
-| **Record** | Playwright | Opens Chrome. You click and type through the task once. Each action is saved with **several ways to find the element again** (test id, role + name, label, text, CSS path) and **which dialog it was in**. When you close the window, the recording is **checked immediately** by replaying it. |
-| **Capture** | Playwright + rrweb | A headless Chrome replays the script **for real**, waiting for spinners, animations and disabled buttons. rrweb records every DOM change (structure + styles, not pixels); images and fonts are embedded. Output: `public/recordings/<name>.json`. |
-| **Play** | Remotion | For every video frame, rrweb rebuilds the page *exactly as it was at that moment*, and a smooth fake cursor with click ripples is drawn on top. Step cards, progress bars and auto-advance come from `<Tutorial />`. |
+| **Record** | Playwright + rrweb | Opens Chrome. You do the task once. rrweb records the page **as you use it** — every DOM change (structure + styles, not pixels). Your clicks are noted too (where, and when you pressed Alt+N for a new step). Images and fonts are embedded. |
+| **Tidy** | automatic | Everything before Alt+R is dropped. The session is split into steps. **Pauses are cut**: while you think or the app loads, the tutorial skips ahead, so it moves at a steady pace. Output: `public/recordings/<name>.json`. |
+| **Play** | Remotion | For every video frame, rrweb rebuilds the page *exactly as it was at that moment*. A smooth cursor glides between your clicks, with click ripples. Step cards, progress bars and auto-advance come from `<Tutorial />`. |
+
+**Nothing is replayed.** The tutorial shows what really happened while you clicked, so it works with any
+widget — MUI dropdowns, autocompletes, dependent fields, dialogs — because it only watches.
 
 Your app's code is **never modified** — rrweb is injected into the page from outside by Playwright.
 
@@ -61,8 +59,7 @@ npm run test:recorder     # optional: self-test, should end with "All checks pas
 ## Quick start (demo)
 
 ```bash
-npm run dev                          # viewer at http://localhost:5180
-npm run capture -- ticket-form       # (re)build the demo recording
+npm run dev               # viewer at http://localhost:5180
 ```
 
 Open **http://localhost:5180/?t=ticket-form**.
@@ -71,11 +68,7 @@ Open **http://localhost:5180/?t=ticket-form**.
 
 ## Use it on your own app
 
-### Option A — your running app (URL mode)
-
-Best for real apps. No wrappers or mocks needed. Use a **test account / staging environment** — see [safety](#real-data-privacy--safety).
-
-**1. Start your app** as usual, e.g. `npm start` → `http://localhost:3000`.
+**1. Start your app** as usual (or use staging), e.g. `http://localhost:3000`.
 
 **2. Record:**
 
@@ -85,41 +78,26 @@ npm run record -- --url http://localhost:3000/tickets create-ticket
 
 In the Chrome window that opens:
 
-1. **Log in** if needed, and go to the screen where the tutorial starts — **with no dialogs open**.
+1. **Log in** if needed, and go to the screen where the tutorial starts.
 2. Click inside the page, then press **Alt + R** (Mac: **⌥ Option + R**). The terminal prints `● Recording started`.
-   Pressing it again **starts over**.
-3. Do the task. Press **Alt + N** (Mac: **⌥ Option + N**) before each new step.
+   Made a mistake? Press it again to **start over**.
+3. Do the task at a normal pace — pauses are cut automatically. Press **Alt + N** (Mac: **⌥ Option + N**) before each new step.
 4. **Close the window.**
 
-What happens next, automatically:
-- `tutorials/create-ticket.tutorial.json` — the script — is saved
-- `.auth/localhost_3000.json` — your saved login — is saved (**keep private**)
-- the script is **replayed once** to check it works, and the tutorial is built.
-  You'll see `✅ Tutorial works` or a clear explanation of what to fix.
+You get:
+- `public/recordings/create-ticket.json` — the tutorial
+- `tutorials/create-ticket.tutorial.json` — step titles to edit (see [Step titles](#step-titles))
+- `.auth/localhost_3000.json` — your saved login, reused next time (**keep private**)
 
-> The check replays your steps **for real** (it really clicks Submit). Add `--no-capture` to skip it,
-> or put `"safe": true` in the script first (see [Capture options](#capture-options)).
+**3. View** — `npm run dev` → `http://localhost:5180/?t=create-ticket`
 
-**3. Give the steps real titles** in the script (replace `"Step 1"`, `"Step 2"`… and the descriptions), then refresh:
+When the UI changes, record again — it takes as long as doing the task once.
 
-```bash
-npm run capture -- create-ticket
-```
+**A single component instead of a whole app:** put it in `src/components/MyThing.tsx` (default export; wrap
+providers in `src/harness.tsx`), then `npm run record -- MyThing my-thing` — it records immediately.
+Preview it at `http://localhost:5180/harness.html?c=MyThing`.
 
-**4. View** — `npm run dev` → `http://localhost:5180/?t=create-ticket`
-
-> Re-run `capture` whenever the UI changes — no need to record again.
-
-### Option B — a single component (component mode)
-
-Best for isolated components or demo data.
-
-1. Put the component in `src/components/MyThing.tsx` (as a **default export**).
-2. If it needs providers (router, store, theme, auth), wrap it in `src/harness.tsx`.
-3. `npm run record -- MyThing my-thing` (records immediately; Alt+N = new step; close the window to finish).
-4. View at `http://localhost:5180/?t=my-thing`.
-
-Preview any component on its own at `http://localhost:5180/harness.html?c=MyThing`.
+Options: `--mask-inputs` hides everything typed into fields; `--no-inline-assets` doesn't embed images/fonts.
 
 ---
 
@@ -133,9 +111,74 @@ Preview any component on its own at `http://localhost:5180/harness.html?c=MyThin
 
 Click inside the page first so it has keyboard focus. The shortcuts never type into fields.
 
+## Step titles
+
+Steps are called "Step 1", "Step 2"… at first. Edit the `title` and `description` of each step in
+`tutorials/<name>.tutorial.json`, then:
+
+```bash
+npm run titles -- <name>
+```
+
 ---
 
-## The script file
+## Show the tutorial in your React app
+
+The viewer is one component: `src/viewer/Tutorial.tsx`.
+
+1. In your app: `npm i remotion @remotion/player rrweb` (keep all `remotion` / `@remotion/*` versions identical).
+2. Copy `src/viewer/` (`Tutorial.tsx`, `Tutorial.css`, `RrwebClip.tsx`, `time.ts`, `types.ts`) into your app.
+3. Copy the recording JSON into your app's `public/` folder.
+4. Use it:
+
+```tsx
+import { Tutorial } from "./viewer/Tutorial";
+
+<Tutorial src="/recordings/create-ticket.json" />
+```
+
+Load it lazily so Remotion (~500 KB) only downloads when needed:
+
+```tsx
+const Tutorial = React.lazy(() => import("./viewer/Tutorial").then((m) => ({ default: m.Tutorial })));
+<Suspense fallback={<div style={{ aspectRatio: "16/9" }} />}><Tutorial src="…" /></Suspense>
+```
+
+---
+
+## Commands
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Viewer + harness at `http://localhost:5180` |
+| `npm run record -- --url <url> <name>` | Record a tutorial on your running app |
+| `npm run record -- <Component> [name]` | Record on a component from `src/components/` |
+| `npm run titles -- <name>` | Apply step titles from `tutorials/<name>.tutorial.json` |
+| `npm run capture -- <name> [--watch] [--safe]` | Optional robot replay — see [below](#optional-robot-replay-capture) |
+| `npm run test:recorder` | Self-test on the fixtures |
+| `npm run typecheck` | TypeScript check |
+
+Viewer URL: `http://localhost:5180/?t=<name>`
+
+---
+
+## Real data, privacy & safety
+
+- **The recording shows what was on screen.** Use a test account / staging data if the tutorial will be shared. Treat `public/recordings/*.json` like a screenshot of your app.
+- **Hide personal data:** add `data-private` to elements (text becomes `***`), `data-tk-block` to leave them out entirely, or record with `--mask-inputs`.
+- **Passwords are never recorded**, and nothing before Alt+R is kept (so logging in isn't in the tutorial).
+- `.auth/` holds a live login session — it's in `.gitignore`; never share it.
+
+---
+
+## Optional: robot replay (capture)
+
+`npm run record` is all you need. This is an alternative: a robot **redoes** the actions saved in
+`tutorials/<name>.tutorial.json` and films the robot — e.g. to remake a tutorial without clicking through it.
+It overwrites `public/recordings/<name>.json`. It's less reliable than filming you (the robot has to find
+every element again and get the timing right), and it **really performs the actions** — use `--safe` on real systems.
+
+### The script file
 
 `tutorials/<name>.tutorial.json` — written by `record`, editable by hand:
 
@@ -164,7 +207,7 @@ Click inside the page first so it has keyboard focus. The shortcuts never type i
 
 Use `"component": "TicketForm"` instead of `"url"` for component mode.
 
-### Actions
+#### Actions
 
 | Action | Fields | Recorded automatically? |
 |---|---|---|
@@ -178,7 +221,7 @@ Use `"component": "TicketForm"` instead of `"url"` for component mode.
 | `goto` | `url` (absolute or relative) | ✍️ add by hand |
 | `wait` | `ms` | ✍️ add by hand |
 
-### Targets — how an element is found
+#### Targets — how an element is found
 
 `target` is tried first, then each entry in `alts`, each also in a looser form
 (without a trailing `*`, partial match). If the action has `within`, the search starts inside that dialog/panel.
@@ -196,9 +239,9 @@ Extras on any target: `"exact": true` (whole-text match), `"nth": 1` (the 2nd ma
 
 **Tip:** add `data-testid` to the controls your tutorials use — tutorials then survive text and layout changes.
 
-### Variables
+#### Variables
 
-Use these in `type` text so each capture types something new (handy when your app rejects duplicates):
+Use these in `type` text so each robot run types something new (handy when your app rejects duplicates):
 
 | Variable | Example |
 |---|---|
@@ -209,7 +252,7 @@ Use these in `type` text so each capture types something new (handy when your ap
 
 ---
 
-## Capture options
+### Capture options
 
 On the command line:
 
@@ -235,110 +278,24 @@ Pacing lives in `PACE` at the top of `scripts/capture.mjs` (cursor move 700 ms, 
 
 ---
 
-## Show the tutorial in your React app
-
-The viewer is one component: `src/viewer/Tutorial.tsx`.
-
-1. In your app: `npm i remotion @remotion/player rrweb` (keep all `remotion` / `@remotion/*` versions identical).
-2. Copy `src/viewer/` (`Tutorial.tsx`, `Tutorial.css`, `RrwebClip.tsx`, `types.ts`) into your app.
-3. Copy the recording JSON into your app's `public/` folder.
-4. Use it:
-
-```tsx
-import { Tutorial } from "./viewer/Tutorial";
-
-<Tutorial src="/recordings/create-ticket.json" />
-```
-
-Load it lazily so Remotion (~500 KB) only downloads when needed:
-
-```tsx
-const Tutorial = React.lazy(() => import("./viewer/Tutorial").then((m) => ({ default: m.Tutorial })));
-<Suspense fallback={<div style={{ aspectRatio: "16/9" }} />}><Tutorial src="…" /></Suspense>
-```
-
----
-
-## Commands
-
-| Command | Description |
-|---|---|
-| `npm run dev` | Viewer + harness at `http://localhost:5180` |
-| `npm run record -- --url <url> <name> [--no-capture]` | Record on your running app, then check it |
-| `npm run record -- <Component> [name] [--no-capture]` | Record on a component from `src/components/` |
-| `npm run capture -- <name> [--watch] [--safe] [--no-inline-assets]` | Build `public/recordings/<name>.json` from the script |
-| `npm run test:recorder` | Self-test of record + capture on the fixtures |
-| `npm run typecheck` | TypeScript check |
-
-Viewer URL: `http://localhost:5180/?t=<name>`
-
----
-
-## What it handles for you
-
-| Situation | How |
-|---|---|
-| Buttons renamed / moved | Several ways to find each element (`alts`) + looser matching |
-| Two buttons with the same text (e.g. "Submit" on the page and in a dialog) | Records the dialog/panel it's in (`within`) and its position (`nth`); never clicks behind an open dialog |
-| MUI required fields (`Name *`) | Ignores the hidden `*`; capture also retries without it |
-| MUI / custom dropdowns that open on mousedown | Records the dropdown itself, not the page background |
-| Clicking a checkbox's label | Recorded once, not twice |
-| Clicks on empty space | Ignored |
-| Spinners, skeletons, animations, disabled buttons | Waits until loading indicators are gone and the element is enabled and still |
-| Search-as-you-type lists from the server | Keeps looking for up to 15 s |
-| Recording started with a dialog already open | Warns you to close it and press Alt+R again |
-| Saved login expired | Says so, instead of "couldn't find the button" |
-| Your app rejects duplicate data | `{{time}}` / `{{rand}}` variables |
-| You don't want real records created | `--safe` / `"safe": true` / `"block"` |
-| Viewers can't reach your app's images (behind login) | Images and fonts are embedded in the recording |
-| Personal data on screen | `[data-private]`, `"mask"`, `"maskInputs"` |
-| Something still fails | Clear message + `capture-failed-<name>.png` screenshot + `--watch` |
-
----
-
-## Troubleshooting
-
-| Message / problem | Fix |
-|---|---|
-| `couldn't find {...}` | Open `capture-failed-<name>.png` to see the screen. Usually: wrong start page, a dialog that no step opened, or changed text. Run with `--watch` to watch it happen. Fix the target in the script or record again. |
-| `Capture landed on a login page` | Your saved login expired. Record again (log in, Alt+R, close). |
-| `found … but something is covering it` | A dialog, cookie banner or overlay is on top. Add a step that closes it, or run with `--watch`. |
-| `⚠ A dialog/modal is open` while recording | Close the dialog, press Alt+R again — the step that opens it must be recorded. |
-| `rrweb didn't start… is the app running?` | Start your app first; check the `url` in the script. |
-| Everything is in one step | Press Alt+N / ⌥ Option+N between steps — or split `actions` into steps by hand. |
-| Nothing recorded in URL mode | You didn't press Alt+R / ⌥ Option+R after logging in. |
-| `upload needs these files` | Put the named files in `tutorials/files/`. |
-| `a loading indicator stayed on screen for 15 s` | Your app shows a permanent spinner/progress bar; capture stops waiting for indicators after that. |
-| Component mode: blank page | The component needs providers — wrap it in `src/harness.tsx`. |
-
----
-
-## Real data, privacy & safety
-
-- **Actions are real.** In URL mode, "Submit" really submits — during the post-record check and **every capture**. Use a test account or staging, or `"safe": true`.
-- **Recordings contain page text** and embedded images. Treat `public/recordings/*.json` like a screenshot of your app. Mask personal data with `data-private` / `"mask"`.
-- **Passwords are never recorded**, and nothing before Alt+R is recorded. But `.auth/` holds a live session — it's in `.gitignore`; never share it.
-- `capture-failed-*.png` screenshots may show real data — also in `.gitignore`.
-
----
-
 ## Project layout
 
 ```
 tutorial-kit/
 ├── scripts/
-│   ├── lib.mjs              open browser (URL / component), inject rrweb, recorder state
-│   ├── recorder-client.js   runs in the page while recording: what was clicked, and how to find it
-│   ├── record.mjs           you click → tutorials/<name>.tutorial.json → auto-check with capture
-│   ├── capture.mjs          script → robot replay + rrweb → public/recordings/<name>.json
+│   ├── record.mjs           npm run record: film your session → public/recordings/<name>.json
+│   ├── session.mjs          the filming: rrweb + clicks → steps, pauses cut
+│   ├── recorder-client.js   runs in the page while recording: what was clicked, where, how to find it
+│   ├── lib.mjs              open browser (URL / component), inject rrweb, embed images, recorder state
+│   ├── titles.mjs           npm run titles
+│   ├── capture.mjs          optional robot replay
 │   └── test-recorder.mjs    self-test (npm run test:recorder)
 ├── src/
-│   ├── components/          drop components here (component mode); also test fixtures:
-│   │                        SelectDemo (MUI-like dropdown), TestBench (dialog, duplicates, …), LoginDemo
+│   ├── components/          drop components here (component mode); also test fixtures
 │   ├── harness.tsx          mounts a component by name; add providers here
 │   └── viewer/              <Tutorial /> — reuse in your app
-├── tutorials/               scripts (*.tutorial.json); files/ for uploads
-├── public/recordings/       captured recordings
+├── tutorials/               step titles + actions (*.tutorial.json); files/ for robot uploads
+├── public/recordings/       recordings the viewer plays
 ├── .auth/                   saved logins — NEVER commit
 ├── index.html               viewer page
 └── harness.html             component harness page
@@ -346,19 +303,18 @@ tutorial-kit/
 
 ## Known limits
 
-- `<canvas>`, WebGL and `<video>` content isn't captured.
+- `<canvas>` (e.g. some charts), WebGL and `<video>` content isn't recorded.
 - Native `<select>` menus are drawn by the OS — the open list won't show (the chosen value will).
-- Hover-only menus need a `hover` action added by hand.
-- Drag-and-drop isn't supported yet.
+- Pure-CSS `:hover` styles don't show (menus that open on hover via JavaScript do).
 - Links that open a **new tab** aren't followed (the recording stays on the first tab).
 - Cross-origin iframes aren't recorded.
+- Mistakes you make while recording stay in — press Alt+R to start over.
 - Remotion license: free for individuals and companies of up to 3 people; larger companies need a company license (then add `acknowledgeRemotionLicense` to `<Player>`).
 
 ## Roadmap
 
-- [ ] Highlight box / caption overlay per step
-- [ ] Drag-and-drop and new-tab support
+- [ ] Cut out a mistake without recording again
+- [ ] Highlight box / caption overlay per step, zoom to the click
 - [ ] MP4 / WebM export of each step
-- [ ] Browser-frame chrome around the page
+- [ ] New-tab support
 - [ ] Publish as an npm package (`npx tutorial-kit record …`)
-- [ ] CI job that re-captures when the UI changes

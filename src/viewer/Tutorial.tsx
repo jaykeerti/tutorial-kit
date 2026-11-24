@@ -3,6 +3,7 @@
 import { Player, PlayerRef } from "@remotion/player";
 import { useEffect, useRef, useState } from "react";
 import { RrwebClip } from "./RrwebClip";
+import { stepLength } from "./time";
 import type { Recording } from "./types";
 import "./Tutorial.css";
 
@@ -36,7 +37,7 @@ export function Tutorial({ src }: { src: string }) {
     };
   }, [active, rec]);
 
-  if (error) return <p className="tk-error">Couldn't load tutorial: {error}. Did you run <code>npm run capture</code>?</p>;
+  if (error) return <p className="tk-error">Couldn't load tutorial: {error}. Did you run <code>npm run record</code>?</p>;
   if (!rec) return <div className="tk-loading">Loading tutorial…</div>;
 
   return (
@@ -76,4 +77,4 @@ export function Tutorial({ src }: { src: string }) {
   );
 }
 
-const frames = (rec: Recording, i: number) => Math.max(1, Math.ceil(((rec.steps[i].end - rec.steps[i].start) / 1000) * FPS));
+const frames = (rec: Recording, i: number) => Math.max(1, Math.ceil((stepLength(rec.steps[i]) / 1000) * FPS));

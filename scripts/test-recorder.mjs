@@ -5,7 +5,9 @@ import fs from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
+import { chromium } from "playwright-core";
 import { createRecorderState, openTarget, settle } from "./lib.mjs";
+import { attachSession, buildRecording } from "./session.mjs";
 
 let failed = 0;
 const check = (ok, msg) => {
@@ -120,13 +122,6 @@ try {
     check(acts[6]?.key === "Enter" && acts[6]?.target?.label === "Search", "Enter in Search recorded");
     check(acts.every((a) => a.alts?.length), "every action has fallback ways to find its element");
 
-    // Dialog open when pressing Alt+R → warning.
-    await p.reload();
-    await p.waitForTimeout(500);
-    await r.humanClick(p.getByRole("button", { name: "Add part" }));
-    await p.keyboard.press("Alt+KeyR");
-    await p.waitForTimeout(200);
-    check(r.logs.some((l) => l.includes("A dialog/modal is open")), "warns when recording starts with a dialog open");
     await r.close();
   }
 
@@ -152,6 +147,82 @@ try {
     check(rec.includes("data:image/svg+xml;base64"), "image embedded in the recording");
     check(!rec.includes("jane.doe@example.com"), "data-private text masked");
     check(c.out.includes("Blocked"), "capture reports blocked requests");
+  }
+
+  // ---------------------------------------------------------------------------------------
+  section("Filming a session (npm run record) — nothing is replayed");
+  {
+    const t = await openTarget({ component: "TestBench", headless: true, port: 5186 });
+    const session = await attachSession(t.page, { recordingFromStart: false, log: () => {} });
+    await settle(t.page, t.pageUrl);
+    const p = t.page;
+    const click = async (loc) => {
+      const b = await loc.boundingBox();
+      await p.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 5 });
+      await p.mouse.down();
+      await p.mouse.up();
+      await p.waitForTimeout(150);
+    };
+    // Before Alt+R (like logging in) — must not end up in the recording.
+    await click(p.getByLabel("Search"));
+    await p.keyboard.type("BEFORE-START", { delay: 10 });
+    await p.getByLabel("Search").fill("");
+    await p.keyboard.press("Alt+KeyR");
+    await p.waitForTimeout(300);
+    // Step 1, with a long "thinking" pause in the middle.
+    await click(p.getByRole("button", { name: "Add part" }));
+    await click(p.getByLabel("Part name"));
+    await p.keyboard.type("Widget", { delay: 30 });
+    await p.selectOption("#category", { label: "Nuts" });
+    await click(p.getByText("Urgent"));
+    await p.waitForTimeout(4000);
+    await click(p.getByRole("dialog").getByRole("button", { name: "Submit" }));
+    await p.getByRole("dialog").waitFor({ state: "detached", timeout: 5000 });
+    // Step 2.
+    await p.keyboard.press("Alt+KeyN");
+    await click(p.getByLabel("Search"));
+    await p.keyboard.type("nuts", { delay: 30 });
+    await p.keyboard.press("Enter");
+    await click(p.getByRole("button", { name: "Submit" }));
+    await p.waitForTimeout(500);
+    const built = await buildRecording({ ...session, source: "TestBench" });
+    await t.close();
+
+    check(!!built, "recording built from the session");
+    const json = built?.json ?? "";
+    const rec = built ? JSON.parse(json) : { steps: [], events: [], pointer: [] };
+    check(rec.steps.length === 2, `2 steps (got ${rec.steps.length})`);
+    check(!json.includes("BEFORE-START"), "nothing from before Alt+R is kept");
+    check(json.includes("Saved (") && json.includes("Nuts · urgent") && json.includes("Page submits: 1") && json.includes("Searched: nuts"), "everything you did is in the recording");
+    check(rec.pointer.length >= 6 && rec.pointer.every((q) => q.x >= 0 && q.y >= 0 && q.x <= 1280 && q.y <= 720), `click positions recorded (${rec.pointer.length})`);
+    const s1 = rec.steps[0];
+    const cut = s1 ? s1.end - s1.start - s1.timeline.at(-1)[0] : 0;
+    check(cut > 2500, `the 4-second pause was cut (${(cut / 1000).toFixed(1)} s removed from step 1)`);
+    check(!rec.events.some((e) => e.type === 3 && e.data?.source === 1), "raw mouse movements dropped (viewer draws its own cursor)");
+    check(json.includes("data:image/svg+xml;base64"), "image embedded");
+    check(!json.includes("jane.doe@example.com"), "data-private text masked");
+
+    // The real viewer plays it.
+    fs.mkdirSync("public/recordings", { recursive: true });
+    fs.writeFileSync("public/recordings/_film.json", json);
+    temp.push("public/recordings/_film.json");
+    const server = await createServer({ server: { port: 5187, strictPort: true }, logLevel: "silent" });
+    await server.listen();
+    const browser = await chromium.launch({ channel: "chrome", headless: true });
+    try {
+      const v = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+      await v.goto("http://localhost:5187/?t=_film");
+      const frame = v.frameLocator(".tk-host iframe");
+      const shows = (text, timeout) => frame.getByText(text).first().waitFor({ timeout }).then(() => true, () => false);
+      check(await shows("Parts", 15000), "viewer shows the recorded page");
+      check((await v.locator(".tk-step").count()) === 2, "viewer has 2 step cards");
+      check(await shows("Nuts · urgent", 20000), "step 1 plays through to the saved part");
+      await v.locator(".tk-step").nth(1).click();
+      check(await shows("Page submits: 1", 20000), "step 2 plays through to the end");
+    } finally {
+      await browser.close();
+      await server.close();
+    }
   }
 
   // ---------------------------------------------------------------------------------------
