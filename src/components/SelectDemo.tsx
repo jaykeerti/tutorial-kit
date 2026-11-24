@@ -14,10 +14,15 @@ export default function SelectDemo() {
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", padding: 48, maxWidth: 420 }}>
       <h1 style={{ marginTop: 0 }}>Deploy settings</h1>
-      <div id="env-label" style={{ fontWeight: 600, marginBottom: 6 }}>Environment</div>
+      {/* Like MUI: required asterisk hidden from screen readers, and aria-labelledby pointing at
+          both the label and the select itself (so its accessible name includes the current value). */}
+      <div id="env-label" style={{ fontWeight: 600, marginBottom: 6 }}>
+        Environment<span aria-hidden="true"> *</span>
+      </div>
       <div
+        id="env-select"
         role="combobox"
-        aria-labelledby="env-label"
+        aria-labelledby="env-label env-select"
         aria-expanded={open}
         tabIndex={0}
         onMouseDown={() => setOpen(true)}

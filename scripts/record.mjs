@@ -5,67 +5,45 @@
 //
 // In the Chrome window that opens:
 //   • log in first if needed (in URL mode the login is saved to .auth/ and reused by capture)
-//   • press Alt+R (Mac: Option+R) to start recording, Alt+N (Mac: Option+N) for a new step
+//   • press Alt+R (Mac: Option+R) to start recording — press it again to start over
+//   • press Alt+N (Mac: Option+N) before each new step
 //   • close the window when you're done
-// Your actions are saved to tutorials/<name>.tutorial.json — rename the steps, then run capture.
+//
+// Then the recording is checked straight away by replaying it (capture), so you know at once
+// whether it works. Add --no-capture to skip that (e.g. if replaying would create real records).
 import fs from "node:fs";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { authFileFor, openTarget, parseArgs, settle } from "./lib.mjs";
+import { authFileFor, createRecorderState, openTarget, parseArgs, settle } from "./lib.mjs";
 
-const { url, component, name } = parseArgs(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const noCapture = argv.includes("--no-capture");
+const { url, component, name } = parseArgs(argv);
 if (!url && !component) {
-  console.error("Usage:\n  npm run record -- --url <app-url> <tutorial-name>\n  npm run record -- <ComponentName> [tutorial-name]");
+  console.error("Usage:\n  npm run record -- --url <app-url> <tutorial-name> [--no-capture]\n  npm run record -- <ComponentName> [tutorial-name] [--no-capture]");
   process.exit(1);
 }
 
 const auth = url ? authFileFor(url) : undefined;
 const { context, page, pageUrl, close } = await openTarget({ url, component, auth, headless: false, port: 5182 });
 
-const steps = [{ title: "Step 1", description: "", actions: [] }];
-const current = () => steps[steps.length - 1];
-let recording = !url; // in URL mode, wait until the user presses Alt+R (after logging in)
-let recordStartUrl; // the tutorial starts from the page you were on when you pressed Alt+R
-
-await page.exposeBinding("__tk_rec", (src, a) => {
-  if (a.action === "start") {
-    if (!recording) {
-      recording = true;
-      recordStartUrl = src.page.url();
-      console.log(`● Recording started on ${recordStartUrl}`);
-    }
-    return;
-  }
-  if (!recording) return;
-  if (a.action === "newStep") {
-    if (!current().actions.length) return;
-    steps.push({ title: `Step ${steps.length + 1}`, description: "", actions: [] });
-    console.log(`— Step ${steps.length} —`);
-    return;
-  }
-  // Merge consecutive typing in the same field into one action.
-  const last = current().actions.at(-1);
-  if (a.action === "type" && last?.action === "type" && JSON.stringify(last.target) === JSON.stringify(a.target)) {
-    last.text = a.text;
-  } else {
-    current().actions.push(a);
-  }
-  console.log("  recorded", JSON.stringify(a));
-});
-
-// The in-page listener lives in recorder-client.js (also used by scripts/test-recorder.mjs).
+// In URL mode, wait until Alt+R (so logging in isn't recorded). Component mode records right away.
+const state = createRecorderState({ recordingFromStart: !url });
+await page.exposeBinding("__tk_rec", (_src, msg) => state.handle(msg));
 await page.addInitScript({ path: fileURLToPath(new URL("./recorder-client.js", import.meta.url)) });
 
 await settle(page, pageUrl);
 if (url) {
-  console.log("Log in if you need to and go to the starting screen.");
-  console.log("Then press Alt+R in the page to START recording. Alt+N = new step. Close the window to finish.");
+  console.log("Log in if you need to and go to the screen where the tutorial starts (no dialogs open).");
+  console.log("Then click in the page and press Alt+R (Mac: Option+R) to START. Alt+N (Mac: Option+N) = new step.");
+  console.log("Close the window to finish.");
 } else {
-  console.log("Recording… click through the task. Alt+N = new step. Close the window to finish.");
+  console.log("Recording… Alt+N (Mac: Option+N) = new step. Close the window to finish.");
 }
 
 await page.waitForEvent("close", { timeout: 0 });
 
-if (url && !recording) console.warn("⚠ Alt+R was never pressed, so nothing was recorded.");
+if (url && !state.recording) console.warn("⚠ Alt+R was never pressed, so nothing was recorded.");
 if (url) {
   try {
     fs.mkdirSync(".auth", { recursive: true });
@@ -75,13 +53,30 @@ if (url) {
     console.warn("Couldn't save the login state.");
   }
 }
+await close();
 
+const steps = state.steps();
 const out = `tutorials/${name}.tutorial.json`;
-const script = {
-  ...(url ? { url: recordStartUrl ?? url, auth } : { component }),
-  steps: steps.filter((s) => s.actions.length),
-};
+const script = { ...(url ? { url: state.startUrl ?? url, auth } : { component }), steps };
 fs.mkdirSync("tutorials", { recursive: true });
 fs.writeFileSync(out, JSON.stringify(script, null, 2));
-console.log(`Saved ${out}. Edit the step titles/descriptions, then: npm run capture -- ${name}`);
-await close();
+console.log(`Saved ${out} (${steps.length} steps, ${steps.reduce((n, s) => n + s.actions.length, 0)} actions).`);
+
+if (!steps.length) process.exit(1);
+
+if (noCapture) {
+  console.log(`Next: rename the steps in ${out}, then  npm run capture -- ${name}`);
+  process.exit(0);
+}
+
+console.log("\nChecking the recording by replaying it now (this performs the steps again for real — use --no-capture to skip)…\n");
+const code = await new Promise((resolve) =>
+  spawn(process.execPath, [fileURLToPath(new URL("./capture.mjs", import.meta.url)), name], { stdio: "inherit" }).on("exit", resolve),
+);
+if (code === 0) {
+  console.log(`\n✅ Tutorial works. View it:  npm run dev  →  http://localhost:5180/?t=${name}`);
+  console.log(`   Give the steps real titles in ${out}, then  npm run capture -- ${name}  to refresh.`);
+} else {
+  console.log(`\n✗ The replay failed (see above). Fix ${out} or record again, then  npm run capture -- ${name}`);
+}
+process.exit(code ?? 1);
