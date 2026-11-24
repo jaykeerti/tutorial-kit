@@ -1,0 +1,30 @@
+.tf { font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; background: #f1f5f9; min-height: 100vh; }
+.tf-top { height: 60px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; }
+.tf-logo { font-weight: 800; font-size: 20px; }
+.tf-user { font-size: 14px; color: #64748b; }
+.tf-main { max-width: 900px; margin: 40px auto; padding: 0 24px; }
+.tf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.tf-head h1 { margin: 0; font-size: 28px; }
+.tf-primary { background: #7c3aed; color: #fff; border: 0; border-radius: 10px; padding: 12px 20px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.tf-primary:disabled { opacity: .45; }
+.tf-ghost { background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px 20px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.tf-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.tf-item { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; gap: 16px; font-size: 16px; }
+.tf-new { border-color: #7c3aed; box-shadow: 0 0 0 4px #ede9fe; animation: tf-pop .5s ease-out; }
+@keyframes tf-pop { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+.tf-id { color: #94a3b8; font-weight: 600; width: 32px; }
+.tf-title { flex: 1; }
+.tf-badge { font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+.tf-low { background: #e2e8f0; color: #334155; }
+.tf-medium { background: #fef3c7; color: #92400e; }
+.tf-high { background: #fee2e2; color: #b91c1c; }
+.tf-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: grid; place-items: center; }
+.tf-modal { width: 460px; background: #fff; border-radius: 16px; padding: 28px; box-shadow: 0 30px 60px rgba(0, 0, 0, .25); }
+.tf-modal h2 { margin: 0 0 18px; font-size: 22px; }
+.tf-label { display: block; font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: #334155; }
+.tf-input { width: 100%; box-sizing: border-box; padding: 12px 14px; font-size: 15px; border: 1px solid #cbd5e1; border-radius: 10px; outline: none; }
+.tf-input:focus { border-color: #7c3aed; box-shadow: 0 0 0 3px #ede9fe; }
+.tf-seg { display: flex; gap: 8px; }
+.tf-seg button { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #cbd5e1; background: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+.tf-seg button.on { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+.tf-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }

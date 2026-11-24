@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# saved logins — never commit
+.auth/
+# recordings contain page text from your app; commit only if that is OK
+# public/recordings/

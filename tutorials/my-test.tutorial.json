@@ -1,0 +1,42 @@
+{
+  "component": "TicketForm",
+  "steps": [
+    {
+      "title": "Step 1",
+      "description": "",
+      "actions": [
+        {
+          "action": "click",
+          "target": {
+            "role": "button",
+            "name": "+ New ticket",
+            "exact": true
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "role": "button",
+            "name": "Medium",
+            "exact": true
+          }
+        },
+        {
+          "action": "type",
+          "target": {
+            "label": "Title"
+          },
+          "text": "testuing"
+        },
+        {
+          "action": "click",
+          "target": {
+            "role": "button",
+            "name": "Create ticket",
+            "exact": true
+          }
+        }
+      ]
+    }
+  ]
+}

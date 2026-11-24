@@ -1,0 +1,24 @@
+{
+  "url": "http://localhost:5180/harness.html?c=TicketForm",
+  "steps": [
+    {
+      "title": "Open a new ticket",
+      "description": "Click “New ticket” at the top right of My tickets.",
+      "actions": [{ "action": "click", "target": { "role": "button", "name": "+ New ticket", "exact": true } }]
+    },
+    {
+      "title": "Describe the problem",
+      "description": "Give the ticket a short, clear title.",
+      "actions": [{ "action": "type", "target": { "label": "Title" }, "text": "Laptop won't connect to Wi-Fi" }]
+    },
+    {
+      "title": "Set the priority and create",
+      "description": "Pick a priority, then click “Create ticket”.",
+      "actions": [
+        { "action": "click", "target": { "role": "button", "name": "Medium", "exact": true } },
+        { "action": "click", "target": { "role": "button", "name": "Create ticket" } },
+        { "action": "wait", "ms": 1200 }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "component": "TicketForm",
+  "steps": [
+    {
+      "title": "Open a new ticket",
+      "description": "Click “New ticket” at the top right of My tickets.",
+      "actions": [{ "action": "click", "target": { "role": "button", "name": "New ticket" } }]
+    },
+    {
+      "title": "Describe the problem",
+      "description": "Give the ticket a short, clear title.",
+      "actions": [{ "action": "type", "target": { "label": "Title" }, "text": "Printer on 3rd floor is jammed" }]
+    },
+    {
+      "title": "Set the priority",
+      "description": "Choose Low, Medium or High depending on urgency.",
+      "actions": [{ "action": "click", "target": { "role": "button", "name": "High", "exact": true } }]
+    },
+    {
+      "title": "Create it",
+      "description": "Click “Create ticket”. It appears at the top of your list.",
+      "actions": [
+        { "action": "click", "target": { "role": "button", "name": "Create ticket" } },
+        { "action": "wait", "ms": 1200 }
+      ]
+    }
+  ]
+}
