@@ -82,8 +82,8 @@ npm run record -- --url http://localhost:3000/tickets create-ticket
 In the Chrome window that opens:
 
 1. **Log in** if needed, and go to the screen where the tutorial should start.
-2. Press **Alt + R** → recording starts (nothing before this is recorded, so your login isn't).
-3. Do the task. Press **Alt + N** before each new step.
+2. Click inside the page, then press **Alt + R** (Mac: **⌥ Option + R**) → recording starts (nothing before this is recorded, so your login isn't).
+3. Do the task. Press **Alt + N** (Mac: **⌥ Option + N**) before each new step.
 4. **Close the window** to finish.
 
 This writes:

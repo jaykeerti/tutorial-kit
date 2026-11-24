@@ -90,8 +90,9 @@ await page.addInitScript(() => {
     if (el.matches("input, textarea") && el.type !== "password") window.__tk_rec({ action: "type", target: describe(el), text: el.value });
   }, true);
   addEventListener("keydown", (e) => {
-    if (e.altKey && e.key.toLowerCase() === "n") window.__tk_rec({ action: "newStep" });
-    if (e.altKey && e.key.toLowerCase() === "r") window.__tk_rec({ action: "start" });
+    // Use the physical key (e.code): on a Mac, Option+R types "®", so e.key is never "r".
+    if (e.altKey && e.code === "KeyN") window.__tk_rec({ action: "newStep" });
+    if (e.altKey && e.code === "KeyR") window.__tk_rec({ action: "start" });
   }, true);
 });
 
