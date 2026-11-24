@@ -1,0 +1,43 @@
+/* Site-wide styles. Change --ifm-color-primary* to your brand color. */
+:root {
+  --ifm-color-primary: #7c3aed;
+  --ifm-color-primary-dark: #6d28d9;
+  --ifm-color-primary-darker: #6526ca;
+  --ifm-color-primary-darkest: #5b21b6;
+  --ifm-color-primary-light: #8b5cf6;
+  --ifm-color-primary-lighter: #9061f9;
+  --ifm-color-primary-lightest: #a78bfa;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #a78bfa;
+  --ifm-color-primary-dark: #9061f9;
+  --ifm-color-primary-darker: #8b5cf6;
+  --ifm-color-primary-darkest: #7c3aed;
+  --ifm-color-primary-light: #c4b5fd;
+  --ifm-color-primary-lighter: #cdbefd;
+  --ifm-color-primary-lightest: #ddd6fe;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+/* ---- Guide player on docs pages ---- */
+.tk-doc-player { margin: 1.5rem 0 2rem; }
+.tk-doc-placeholder { aspect-ratio: 16 / 9; border-radius: 16px; background: var(--ifm-color-emphasis-100); display: grid; place-items: center; color: var(--ifm-color-emphasis-600); }
+.tk-doc-player .tk-step { color: var(--ifm-font-color-base); }
+
+/* Step cards in dark mode (the recorded page itself stays as it was recorded) */
+[data-theme='dark'] .tk-step { background: var(--ifm-background-surface-color); border-color: var(--ifm-color-emphasis-300); }
+[data-theme='dark'] .tk-text span { color: var(--ifm-color-emphasis-700); }
+[data-theme='dark'] .tk-player { border-color: var(--ifm-color-emphasis-300); }
+
+/* ---- Guide cards on the home page ---- */
+.tk-guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.tk-guide-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-radius: 12px;
+  border: 1px solid var(--ifm-color-emphasis-300); color: var(--ifm-font-color-base);
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.tk-guide-card:hover { text-decoration: none; color: var(--ifm-font-color-base); border-color: var(--ifm-color-primary); box-shadow: 0 6px 20px rgba(124, 58, 237, .12); transform: translateY(-1px); }
+.tk-guide-card span { font-size: .9rem; color: var(--ifm-color-emphasis-700); }

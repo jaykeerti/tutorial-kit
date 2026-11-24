@@ -1,0 +1,43 @@
+{
+  "title": "Create a ticket",
+  "description": "Open a new ticket, describe the problem and set its priority.",
+  "category": "Getting started",
+  "component": "TicketForm",
+  "settings": {
+    "zoom": 1.8,
+    "captions": true,
+    "colors": {
+      "accent": "#7c3aed",
+      "click": "#7c3aed",
+      "cursor": "#111111",
+      "captionBg": "rgba(17, 17, 27, 0.86)",
+      "captionText": "#ffffff"
+    }
+  },
+  "steps": [
+    {
+      "title": "Open a new ticket",
+      "description": "Click New ticket and describe the problem.",
+      "actions": [
+        {
+          "caption": "Click “+ New ticket”"
+        },
+        {
+          "caption": "Type “Printer on floor 3 is jammed” in Title"
+        }
+      ]
+    },
+    {
+      "title": "Set priority and create",
+      "description": "Pick High, then Create ticket.",
+      "actions": [
+        {
+          "caption": "Click “High”"
+        },
+        {
+          "caption": "Click “Create ticket”"
+        }
+      ]
+    }
+  ]
+}

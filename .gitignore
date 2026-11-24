@@ -7,3 +7,8 @@ dist/
 
 # screenshots from failed captures (may show real data)
 capture-failed-*.png
+
+# help site: the player code is copied in from src/viewer (npm run docs / help); build output
+help-site/src/tutorial-kit/
+help-site/build/
+help-site/.docusaurus/

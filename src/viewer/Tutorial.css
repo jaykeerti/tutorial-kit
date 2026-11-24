@@ -19,3 +19,8 @@
 /* hide rrweb's built-in mouse; we draw our own */
 .tk-host .replayer-mouse, .tk-host .replayer-mouse-tail { display: none !important; }
 @media (max-width: 900px) { .tk { grid-template-columns: 1fr; } .tk-player { order: -1; } }
+/* layout="stacked": player on top, step cards in a row below */
+.tk.tk-stacked { grid-template-columns: 1fr; gap: 16px; }
+.tk-stacked .tk-player { order: 0; }
+.tk-stacked .tk-steps { margin-top: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.tk-stacked .tk-step { height: 100%; padding: 12px 14px 16px; }

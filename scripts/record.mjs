@@ -52,11 +52,14 @@ if (url) {
   }
 }
 
-// Recording the same tutorial again keeps your settings (zoom, captions, colors).
+// Recording the same tutorial again keeps your page details and settings (zoom, captions, colors).
 const scriptFile = `tutorials/${name}.tutorial.json`;
 let settings = DEFAULT_SETTINGS;
+// For the help site (npm run docs): page title, intro, sidebar group and position.
+let page = { title: name.replace(/[-_]+/g, " ").replace(/^./, (c) => c.toUpperCase()), description: "", category: "Guides" };
 try {
   const old = JSON.parse(fs.readFileSync(scriptFile, "utf8"));
+  for (const k of ["title", "description", "category", "order"]) if (old[k] !== undefined) page[k] = old[k];
   const kept = checkSettings(old.settings).settings;
   settings = { ...DEFAULT_SETTINGS, ...kept, colors: { ...DEFAULT_SETTINGS.colors, ...kept.colors } };
 } catch {}
@@ -77,7 +80,7 @@ fs.writeFileSync(recFile, built.json);
 // …and a small editable file: settings, step titles and captions (+ the actions, for the optional robot replay).
 const steps = state.steps();
 fs.mkdirSync("tutorials", { recursive: true });
-fs.writeFileSync(scriptFile, JSON.stringify({ ...(url ? { url: state.startUrl ?? url, auth } : { component }), settings, steps: scriptSteps(steps) }, null, 2));
+fs.writeFileSync(scriptFile, JSON.stringify({ ...page, ...(url ? { url: state.startUrl ?? url, auth } : { component }), settings, steps: scriptSteps(steps) }, null, 2));
 
 const { info } = built;
 console.log(
@@ -85,3 +88,4 @@ console.log(
 );
 console.log(`   View it:      npm run dev  →  http://localhost:5180/?t=${name}`);
 console.log(`   Titles, captions, zoom, colors:  edit ${scriptFile}, then  npm run titles -- ${name}`);
+console.log(`   Add it to the help site:  npm run docs -- ${name}`);

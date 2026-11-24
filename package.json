@@ -9,6 +9,10 @@
     "record": "node scripts/record.mjs",
     "titles": "node scripts/titles.mjs",
     "apply": "node scripts/titles.mjs",
+    "docs": "node scripts/docs.mjs",
+    "help": "npm --prefix help-site start",
+    "help:build": "npm --prefix help-site run build",
+    "help:serve": "npm --prefix help-site run serve",
     "typecheck": "tsc --noEmit",
     "test:recorder": "node scripts/test-recorder.mjs"
   },

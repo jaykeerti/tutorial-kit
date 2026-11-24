@@ -19,9 +19,11 @@ type TutorialProps = {
   captions?: boolean;
   /** Colors (accent, click, cursor, captionBg, captionText). Overrides the tutorial file. */
   colors?: Partial<Colors>;
+  /** "side" = step cards left of the player (default); "stacked" = player on top, step cards in a row below (narrow columns, docs pages). */
+  layout?: "side" | "stacked";
 };
 
-export function Tutorial({ src, zoom, captions, colors }: TutorialProps) {
+export function Tutorial({ src, zoom, captions, colors, layout = "side" }: TutorialProps) {
   const [rec, setRec] = useState<Recording | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
@@ -55,39 +57,56 @@ export function Tutorial({ src, zoom, captions, colors }: TutorialProps) {
   // Props win over the tutorial file's settings, which win over the defaults.
   const settings = resolveSettings(rec.settings, { zoom, captions, colors });
 
+  const steps = (
+    <ol className="tk-steps">
+      {rec.steps.map((s, i) => (
+        <li key={i}>
+          <button className={i === active ? "tk-step active" : "tk-step"} onClick={() => setActive(i)}>
+            <span className="tk-num">{String(i + 1).padStart(2, "0")}</span>
+            <span className="tk-text">
+              <strong>{s.title}</strong>
+              <span>{s.description}</span>
+            </span>
+            <span className="tk-bar">
+              <span style={{ transform: `scaleX(${i === active ? progress : i < active ? 1 : 0})` }} />
+            </span>
+          </button>
+        </li>
+      ))}
+    </ol>
+  );
+
+  const player = (
+    <div className="tk-player">
+      <Player
+        key={active}
+        ref={playerRef}
+        component={RrwebClip}
+        inputProps={{ rec, step: active, zoom: settings.zoom, captions: settings.captions, colors: settings.colors }}
+        durationInFrames={frames(rec, active)}
+        fps={FPS}
+        compositionWidth={rec.viewport.width}
+        compositionHeight={rec.viewport.height}
+        autoPlay
+        clickToPlay
+        style={{ width: "100%" }}
+      />
+    </div>
+  );
+
   return (
-    <section className="tk" style={{ ["--tk-accent" as string]: settings.colors.accent }}>
-      <ol className="tk-steps">
-        {rec.steps.map((s, i) => (
-          <li key={i}>
-            <button className={i === active ? "tk-step active" : "tk-step"} onClick={() => setActive(i)}>
-              <span className="tk-num">{String(i + 1).padStart(2, "0")}</span>
-              <span className="tk-text">
-                <strong>{s.title}</strong>
-                <span>{s.description}</span>
-              </span>
-              <span className="tk-bar">
-                <span style={{ transform: `scaleX(${i === active ? progress : i < active ? 1 : 0})` }} />
-              </span>
-            </button>
-          </li>
-        ))}
-      </ol>
-      <div className="tk-player">
-        <Player
-          key={active}
-          ref={playerRef}
-          component={RrwebClip}
-          inputProps={{ rec, step: active, zoom: settings.zoom, captions: settings.captions, colors: settings.colors }}
-          durationInFrames={frames(rec, active)}
-          fps={FPS}
-          compositionWidth={rec.viewport.width}
-          compositionHeight={rec.viewport.height}
-          autoPlay
-          clickToPlay
-          style={{ width: "100%" }}
-        />
-      </div>
+    <section className={layout === "stacked" ? "tk tk-stacked" : "tk"} style={{ ["--tk-accent" as string]: settings.colors.accent }}>
+      {layout === "stacked" ? (
+        <>
+          {player}
+          {steps}
+        </>
+      ) : (
+        <>
+          {steps}
+          {player}
+        </>
+      )}
     </section>
   );
 }

@@ -226,18 +226,44 @@ try {
     check(applied.ok && rec2.steps[0].title === "Add a part" && rec2.steps[0].captions[0].text === "Open the Add part dialog", "npm run titles applies edited titles and captions");
     check(rec2.settings?.zoom === false && rec2.settings?.colors?.click === "#dc2626" && !("bogus" in rec2.settings.colors), "settings applied (zoom off, colors), invalid ones dropped");
     check(applied.out.includes('unknown color "bogus"'), "warns about an invalid setting");
+
+    // Add it to the help site (npm run docs), with characters that would break an MDX page.
+    script.title = "Film test";
+    script.category = "Zz test";
+    script.steps[0].actions[1].caption = "Type <b>{x}</b>";
+    fs.writeFileSync("tutorials/_film.tutorial.json", JSON.stringify(script, null, 2));
+    const docsRun = await new Promise((resolve) => {
+      let out = "";
+      const pr = spawn(process.execPath, ["scripts/docs.mjs", "_film"]);
+      pr.stdout.on("data", (d) => (out += d));
+      pr.stderr.on("data", (d) => (out += d));
+      pr.on("exit", (code) => resolve({ ok: code === 0, out }));
+    });
+    const page = "help-site/docs/zz-test/_film.mdx";
+    const body = fs.existsSync(page) ? fs.readFileSync(page, "utf8") : "";
+    check(docsRun.ok && body.includes('<TutorialPlayer name="_film" />') && body.includes("### 1. Add a part") && body.includes("Open the Add part dialog"), "npm run docs writes the help page with player and steps");
+    check(body.includes("Type &lt;b&gt;&#123;x&#125;&lt;/b&gt;"), "special characters escaped for MDX");
+    check(fs.existsSync("help-site/static/recordings/_film.json") && fs.readFileSync("help-site/src/guides.json", "utf8").includes("Film test"), "recording copied and guide listed on the home page");
+    // Hand-edited page (marker removed) is not overwritten.
+    fs.writeFileSync(page, body.replace("tutorial_kit: generated", "").replace("## Steps", "## Steps (edited)"));
+    await new Promise((resolve) => spawn(process.execPath, ["scripts/docs.mjs", "_film"]).on("exit", resolve));
+    check(fs.readFileSync(page, "utf8").includes("## Steps (edited)"), "a page edited by hand is left alone");
+    fs.rmSync("help-site/docs/zz-test", { recursive: true, force: true });
+    fs.rmSync("help-site/static/recordings/_film.json", { force: true });
+    await new Promise((resolve) => spawn(process.execPath, ["scripts/docs.mjs", "--rebuild-list"]).on("exit", resolve));
     const server = await createServer({ server: { port: 5187, strictPort: true }, logLevel: "silent" });
     await server.listen();
     const browser = await chromium.launch({ channel: "chrome", headless: true });
     try {
       const v = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
       await v.goto("http://localhost:5187/?t=_film");
+      // The first caption is only on screen for the first few seconds — check it first.
+      check(await v.locator(".tk-caption", { hasText: "Open the Add part dialog" }).first().waitFor({ timeout: 15000 }).then(() => true, () => false), "caption shown while playing");
       const frame = v.frameLocator(".tk-host iframe");
       const shows = (text, timeout) => frame.getByText(text).first().waitFor({ timeout }).then(() => true, () => false);
       check(await shows("Parts", 15000), "viewer shows the recorded page");
       check((await v.locator(".tk-step").count()) === 2, "viewer has 2 step cards");
       check((await v.locator(".tk").getAttribute("style"))?.includes("#16a34a"), "accent color from the tutorial file used");
-      check(await v.locator(".tk-caption", { hasText: "Open the Add part dialog" }).first().waitFor({ timeout: 10000 }).then(() => true, () => false), "caption shown while playing");
       check(await shows("Nuts · urgent", 20000), "step 1 plays through to the saved part");
       await v.locator(".tk-step").nth(1).click();
       check(await shows("Page submits: 1", 20000), "step 2 plays through to the end");

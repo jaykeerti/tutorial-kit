@@ -23,6 +23,7 @@ like the "how it works" sections on product sites — without screen recording a
 - [Use it on your own app](#use-it-on-your-own-app)
 - [Keyboard shortcuts while recording](#keyboard-shortcuts-while-recording)
 - [Step titles and captions](#step-titles-and-captions)
+- [Help site (Docusaurus)](#help-site-docusaurus)
 - [Show the tutorial in your React app](#show-the-tutorial-in-your-react-app)
 - [Commands](#commands)
 - [Real data, privacy & safety](#real-data-privacy--safety)
@@ -151,12 +152,66 @@ Any CSS color works (`"#2563eb"`, `"rgb(37 99 235)"`, `"teal"`). Unknown or inva
 
 ---
 
+## Help site (Docusaurus)
+
+`help-site/` is a [Docusaurus](https://docusaurus.io) site for all your guides: a sidebar, search that works
+offline, dark mode, and one page per tutorial with the player and the steps written out as text.
+
+**First time:** `npm --prefix help-site install`
+
+**Add guides one by one as you record them:**
+
+```bash
+npm run record -- --url <start page> crs-tutorial   # record
+#   edit tutorials/crs-tutorial.tutorial.json: title, description, category, step titles, captions
+npm run docs -- crs-tutorial                         # add/update its page
+npm run docs                                         # …or add/update every recorded tutorial
+npm run help                                         # preview at http://localhost:3000
+```
+
+Page details in the tutorial file:
+
+| Field | Meaning |
+|---|---|
+| `title` | Page title (also the sidebar entry) |
+| `description` | Intro under the title, and the text on the home-page card |
+| `category` | Sidebar group, e.g. `"Components"` — tutorials with the same category are listed together |
+| `order` | Optional number to set the position within its group |
+
+What `npm run docs` writes:
+- `help-site/docs/<category>/<name>.mdx` — the page. To edit a page by hand, delete the line
+  `tutorial_kit: generated` at its top — after that, `npm run docs` updates only its recording and leaves the text alone.
+- `help-site/static/recordings/<name>.json` — the recording
+- `help-site/src/guides.json` — the list of guides on the home page
+
+You can write your own pages too (any `.md`/`.mdx` file in `help-site/docs/`), and put a player anywhere in one:
+
+```mdx
+import TutorialPlayer from '@site/src/components/TutorialPlayer';
+
+<TutorialPlayer name="crs-tutorial" />
+<TutorialPlayer name="crs-tutorial" zoom={false} captions={false} layout="side" />
+```
+
+**Embed a guide in any other web page** (Confluence, SharePoint, plain HTML): each guide page has
+*Embed this guide in another page* with the `<iframe>` code to copy. It points to `/embed?t=<name>` — just the
+player. Options in the address: `&zoom=0`, `&captions=0`, `&layout=side`.
+
+**Publish the site:** `npm run help:build` makes static files in `help-site/build/` — copy that folder to any web
+server (no Node needed there). Set `url` and `baseUrl` in `help-site/docusaurus.config.ts` first
+(`baseUrl: '/help/'` if it's served from a `/help/` folder). Try the build locally with `npm run help:serve`.
+Name, logo and brand color: `title` in `docusaurus.config.ts`, `help-site/static/img/logo.svg`,
+`--ifm-color-primary` in `help-site/src/css/custom.css`.
+
+---
+
 ## Show the tutorial in your React app
 
 The viewer is one component: `src/viewer/Tutorial.tsx`.
 
 1. In your app: `npm i remotion @remotion/player rrweb` (keep all `remotion` / `@remotion/*` versions identical).
 2. Copy `src/viewer/` (`Tutorial.tsx`, `Tutorial.css`, `RrwebClip.tsx`, `settings.ts`, `time.ts`, `types.ts`) into your app.
+   `layout="stacked"` puts the player on top with the step cards below (good for narrow columns).
 3. Copy the recording JSON into your app's `public/` folder.
 4. Use it:
 
@@ -186,6 +241,9 @@ const Tutorial = React.lazy(() => import("./viewer/Tutorial").then((m) => ({ def
 | `npm run record -- --url <url> <name>` | Record a tutorial on your running app |
 | `npm run record -- <Component> [name]` | Record on a component from `src/components/` |
 | `npm run titles -- <name>` | Apply titles, captions and settings from `tutorials/<name>.tutorial.json` |
+| `npm run docs [-- <name>]` | Add/update guides in the help site |
+| `npm run help` | Preview the help site at `http://localhost:3000` |
+| `npm run help:build` | Build the help site into `help-site/build/` for hosting |
 | `npm run capture -- <name> [--watch] [--safe]` | Optional robot replay — see [below](#optional-robot-replay-capture) |
 | `npm run test:recorder` | Self-test on the fixtures |
 | `npm run typecheck` | TypeScript check |
@@ -319,13 +377,15 @@ tutorial-kit/
 │   ├── session.mjs          the filming: rrweb + clicks → steps, pauses cut
 │   ├── recorder-client.js   runs in the page while recording: what was clicked, where, how to find it
 │   ├── lib.mjs              open browser (URL / component), inject rrweb, embed images, recorder state
-│   ├── titles.mjs           npm run titles
+│   ├── titles.mjs, apply.mjs  npm run titles (apply your edits to the recording)
+│   ├── docs.mjs             npm run docs (add guides to the help site)
 │   ├── capture.mjs          optional robot replay
 │   └── test-recorder.mjs    self-test (npm run test:recorder)
 ├── src/
 │   ├── components/          drop components here (component mode); also test fixtures
 │   ├── harness.tsx          mounts a component by name; add providers here
 │   └── viewer/              <Tutorial /> — reuse in your app
+├── help-site/               Docusaurus help site (docs/, static/recordings/, src/components/)
 ├── tutorials/               step titles + actions (*.tutorial.json); files/ for robot uploads
 ├── public/recordings/       recordings the viewer plays
 ├── .auth/                   saved logins — NEVER commit
