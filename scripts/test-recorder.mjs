@@ -15,6 +15,17 @@ const check = (ok, msg) => {
   if (!ok) failed++;
 };
 const section = (t) => console.log(`\n— ${t} —`);
+
+// Every command at least loads (catches mistakes in scripts the tests below don't run, like record.mjs).
+section("Scripts load");
+{
+  const { spawnSync } = await import("node:child_process");
+  const bad = fs
+    .readdirSync("scripts")
+    .filter((f) => f.endsWith(".mjs"))
+    .filter((f) => spawnSync(process.execPath, ["--check", `scripts/${f}`]).status !== 0);
+  check(bad.length === 0, `all scripts have valid syntax${bad.length ? ` — broken: ${bad.join(", ")}` : ""}`);
+}
 const temp = [];
 const writeTutorial = (name, obj) => {
   const f = `tutorials/${name}.tutorial.json`;
