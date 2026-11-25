@@ -8,6 +8,9 @@ export const VIEWPORT = { width: 1280, height: 720 };
 
 /** Parse CLI args:  --url <url> <name>   or   <ComponentName> [name].  Other --flags are ignored here. */
 export function parseArgs(argv) {
+  // Options that take a value (their value isn't the tutorial name).
+  const s = argv.indexOf("--size");
+  if (s !== -1) argv = argv.filter((_, j) => j !== s && j !== s + 1);
   const i = argv.indexOf("--url");
   if (i !== -1) {
     const url = argv[i + 1];
@@ -30,7 +33,20 @@ export const authFileFor = (url) => path.join(".auth", `${new URL(url).host.repl
  *   - your running app (url mode), reusing a saved login if there is one, or
  *   - a component from src/components via the built-in harness (component mode).
  */
-export async function openTarget({ url, component, auth, headless, port, slowMo = 0 }) {
+/**
+ * Window size for recording, from --fullscreen / --size WxH. Returns "full" (the page fills the
+ * window, maximized, and follows it if you resize), {width, height}, or the default 1280×720.
+ */
+export function sizeFromArgs(argv) {
+  if (argv.includes("--fullscreen")) return "full";
+  const i = argv.indexOf("--size");
+  if (i === -1) return VIEWPORT;
+  const m = /^(\d{3,4})\s*[x×,]\s*(\d{3,4})$/i.exec(argv[i + 1] ?? "");
+  if (!m) throw new Error(`--size needs a size like 1920x1080 (got "${argv[i + 1] ?? ""}")`);
+  return { width: Number(m[1]), height: Number(m[2]) };
+}
+
+export async function openTarget({ url, component, auth, headless, port, slowMo = 0, size = VIEWPORT }) {
   let server = null;
   let pageUrl = url;
   if (!url) {
@@ -38,13 +54,23 @@ export async function openTarget({ url, component, auth, headless, port, slowMo 
     await server.listen();
     pageUrl = `http://localhost:${port}/harness.html?c=${component}`;
   }
-  const browser = await chromium.launch({ channel: "chrome", headless, slowMo }); // uses your installed Chrome
+  const full = size === "full";
+  // uses your installed Chrome
+  const browser = await chromium.launch({ channel: "chrome", headless, slowMo, args: full ? ["--start-maximized"] : [] });
   const context = await browser.newContext({
-    viewport: VIEWPORT,
-    deviceScaleFactor: 1,
+    // Full screen: no fixed size — the page is as big as the window.
+    ...(full ? { viewport: null } : { viewport: size, deviceScaleFactor: 1 }),
     storageState: auth && fs.existsSync(auth) ? auth : undefined,
   });
   const page = await context.newPage();
+  if (full && !headless) {
+    // --start-maximized isn't enough on a Mac; ask Chrome to maximize the window too.
+    try {
+      const cdp = await context.newCDPSession(page);
+      const { windowId } = await cdp.send("Browser.getWindowForTarget");
+      await cdp.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "maximized" } });
+    } catch {}
+  }
   const close = async () => {
     await browser.close().catch(() => {});
     if (server) await server.close();

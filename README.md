@@ -101,6 +101,18 @@ Preview it at `http://localhost:5180/harness.html?c=MyThing`.
 
 Options: `--mask-inputs` hides everything typed into fields; `--no-inline-assets` doesn't embed images/fonts.
 
+**Window size.** Recordings are 1280×720 unless you choose otherwise:
+
+```bash
+npm run record -- --url <start page> crs-tutorial --fullscreen        # maximized window, its full size
+npm run record -- --url <start page> crs-tutorial --size 1920x1080    # a fixed size
+```
+
+With `--fullscreen` the page is as big as the window when you press Alt+R (on a Mac you can also press the green
+button for real full screen first). Don't resize the window after Alt+R — `record` warns you if you did.
+Bigger recordings show smaller text in the player, so zoom on clicks helps there. A fixed `--size` keeps all your
+guides the same shape.
+
 ---
 
 ## Keyboard shortcuts while recording

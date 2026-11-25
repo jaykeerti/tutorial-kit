@@ -294,6 +294,37 @@ try {
   }
 
   // ---------------------------------------------------------------------------------------
+  section("Recording size (--size, --fullscreen)");
+  {
+    const { sizeFromArgs, parseArgs } = await import("./lib.mjs");
+    check(
+      sizeFromArgs(["--size", "1600x900"]).width === 1600 && sizeFromArgs(["--fullscreen"]) === "full" && sizeFromArgs([]).width === 1280,
+      "size options read (--size 1600x900, --fullscreen, default 1280×720)",
+    );
+    check(parseArgs(["--url", "http://x/a", "--size", "1600x900", "my-guide"]).name === "my-guide", "the size isn't mistaken for the tutorial name");
+    let bad = false;
+    try {
+      sizeFromArgs(["--size", "big"]);
+    } catch {
+      bad = true;
+    }
+    check(bad, "a wrong --size is reported");
+    for (const size of [{ width: 1600, height: 900 }, "full"]) {
+      const t = await openTarget({ component: "TestBench", headless: true, port: 5186, size });
+      const session = await attachSession(t.page, { recordingFromStart: true, log: () => {} });
+      await settle(t.page, t.pageUrl);
+      const inner = await t.page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+      await t.page.getByRole("button", { name: "Add part" }).click();
+      await t.page.waitForTimeout(400);
+      const built = await buildRecording({ ...session, source: "TestBench", inline: false });
+      await t.close();
+      const vp = built ? JSON.parse(built.json).viewport : {};
+      const want = size === "full" ? inner : size;
+      check(vp.width === want.width && vp.height === want.height, `${size === "full" ? "full screen" : "1600×900"}: recording is the window's size (${vp.width}×${vp.height})`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------
   section("Expired login");
   {
     const server = await createServer({ server: { port: 5185, strictPort: true }, logLevel: "silent" });

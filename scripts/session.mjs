@@ -15,7 +15,7 @@ const PACE = {
 const META = 4;
 const FULL = 2;
 const INCR = 3;
-const SRC = { mutation: 0, mouseMove: 1, mouseInteraction: 2, scroll: 3, input: 5, touchMove: 6, drag: 12 };
+const SRC = { mutation: 0, mouseMove: 1, mouseInteraction: 2, scroll: 3, viewportResize: 4, input: 5, touchMove: 6, drag: 12 };
 
 /** Start filming a page: rrweb + the action recorder (for steps, click positions and the editable script). */
 export async function attachSession(page, { recordingFromStart, log, mask, maskInputs } = {}) {
@@ -91,10 +91,14 @@ export async function buildRecording({ events, assets, state, source, settings, 
   let eventsJson = JSON.stringify(kept);
   let inlined = 0;
   if (inline) ({ json: eventsJson, count: inlined } = await assets.inline(eventsJson));
-  const doc = JSON.stringify({ viewport: VIEWPORT, source, mode: "filmed", ...(settings ? { settings } : {}), pointer, clicks, steps: out, events: "__EVENTS__" });
+  // The page size you recorded at (full screen = your window), from rrweb's own record of it.
+  const meta = kept.find((e) => e.type === META)?.data;
+  const viewport = meta?.width > 0 && meta?.height > 0 ? { width: meta.width, height: meta.height } : VIEWPORT;
+  const resized = kept.some((e) => e.type === INCR && e.data?.source === SRC.viewportResize && e.timestamp >= begin);
+  const doc = JSON.stringify({ viewport, source, mode: "filmed", ...(settings ? { settings } : {}), pointer, clicks, steps: out, events: "__EVENTS__" });
   return {
     json: doc.replace('"__EVENTS__"', () => eventsJson),
-    info: { events: kept.length, steps: out.length, inlined, seconds: out.reduce((n, s) => n + s.timeline.at(-1)[0], 0) / 1000 },
+    info: { events: kept.length, steps: out.length, inlined, viewport, resized, seconds: out.reduce((n, s) => n + s.timeline.at(-1)[0], 0) / 1000 },
   };
 }
 
