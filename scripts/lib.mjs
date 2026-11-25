@@ -56,7 +56,11 @@ export async function openTarget({ url, component, auth, headless, port, slowMo 
   }
   const full = size === "full";
   // uses your installed Chrome
-  const browser = await chromium.launch({ channel: "chrome", headless, slowMo, args: full ? ["--start-maximized"] : [] });
+  // Self-test only (npm run test:recorder): lets the test drive this browser the way you would.
+  const testPort = process.env.TK_TEST_CDP_PORT;
+  if (testPort) headless = true;
+  const args = [...(full ? ["--start-maximized"] : []), ...(testPort ? [`--remote-debugging-port=${testPort}`] : [])];
+  const browser = await chromium.launch({ channel: "chrome", headless, slowMo, args });
   const context = await browser.newContext({
     // Full screen: no fixed size — the page is as big as the window.
     ...(full ? { viewport: null } : { viewport: size, deviceScaleFactor: 1 }),

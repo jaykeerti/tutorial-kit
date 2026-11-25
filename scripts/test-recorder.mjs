@@ -275,21 +275,46 @@ try {
     await server.listen();
     const browser = await chromium.launch({ channel: "chrome", headless: true });
     try {
+      // Timing (caption, zoom, cursor) is checked as plain functions of time — no waiting on playback,
+      // so the result is the same on a fast or slow machine.
+      const motion = await server.ssrLoadModule("/src/viewer/motion.ts");
+      const time = await server.ssrLoadModule("/src/viewer/time.ts");
+      const film = JSON.parse(fs.readFileSync("public/recordings/_film.json", "utf8"));
+      const [s0, s1] = film.steps;
+      const capAt = time.tutorialAt(s0, s0.captions[0].t);
+      check(
+        motion.captionAt(s0, capAt + 50)?.text === "Open the Add part dialog" && motion.captionAt(s0, capAt + 6000)?.text !== "Open the Add part dialog",
+        "caption timing: shown at its action, gone a few seconds later",
+      );
+      // (The step's last click zooms out quickly by design, so use two.)
+      check(
+        motion.zoomAmount([3000, 6000], 0) === 0 && motion.zoomAmount([3000, 6000], 3000) === 1 && motion.zoomAmount([3000, 6000], 9000) === 0,
+        "zoom timing: out at the start, in at a click, out after",
+      );
+      const p0 = film.pointer.find((q) => q.t >= s0.start);
+      const at0 = motion.filmedCursorAt(film, s0, time.tutorialAt(s0, p0.t));
+      check(Math.abs(at0.x - p0.x) < 1 && Math.abs(at0.y - p0.y) < 1, "cursor is on the click when it happens");
+
+      // The player, opened paused at exact moments (&step=…&at=…) instead of waiting for it to play there.
       const v = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
-      await v.goto("http://localhost:5187/?t=_film");
-      // The first time after npm install, Vite prepares the libraries before the page appears — give it time.
-      await v.locator(".tk-step").first().waitFor({ timeout: 90000 }).catch(() => {});
-      // The first caption is on screen for ~3 s near the start. The player loops through the steps, so
-      // if a slow machine misses it, it comes round again — wait long enough for a full loop.
-      check(await v.locator(".tk-caption", { hasText: "Open the Add part dialog" }).first().waitFor({ timeout: 60000 }).then(() => true, () => false), "caption shown while playing");
       const frame = v.frameLocator(".tk-host iframe");
-      const shows = (text, timeout) => frame.getByText(text).first().waitFor({ timeout }).then(() => true, () => false);
-      check(await shows("Parts", 15000), "viewer shows the recorded page");
+      // Generous timeouts only cover loading (the first time after npm install, Vite prepares the libraries).
+      const shows = (text) => frame.getByText(text).first().waitFor({ timeout: 90000 }).then(() => true, () => false);
+      await v.goto(`http://localhost:5187/?t=_film&step=1&at=${Math.round(capAt + 50)}`);
+      check(await v.locator(".tk-caption", { hasText: "Open the Add part dialog" }).first().waitFor({ timeout: 90000 }).then(() => true, () => false), "caption shown in the player");
+      check(await shows("Parts"), "viewer shows the recorded page");
       check((await v.locator(".tk-step").count()) === 2, "viewer has 2 step cards");
       check((await v.locator(".tk").getAttribute("style"))?.includes("#16a34a"), "accent color from the tutorial file used");
-      check(await shows("Nuts · urgent", 20000), "step 1 plays through to the saved part");
-      await v.locator(".tk-step").nth(1).click();
-      check(await shows("Page submits: 1", 20000), "step 2 plays through to the end");
+      await v.goto(`http://localhost:5187/?t=_film&step=1&at=${Math.round(time.stepLength(s0) - 50)}`);
+      check(await shows("Nuts · urgent"), "end of step 1 shows the saved part");
+      await v.goto(`http://localhost:5187/?t=_film&step=2&at=${Math.round(time.stepLength(s1) - 50)}`);
+      check(await shows("Page submits: 1"), "end of step 2 shows the result");
+      // And it really plays: the progress bar moves.
+      await v.goto("http://localhost:5187/?t=_film");
+      const moving = await v
+        .waitForFunction(() => /scaleX\(0\.[0-9]*[1-9]/.test(document.querySelector(".tk-step.active .tk-bar span")?.getAttribute("style") ?? ""), null, { timeout: 90000 })
+        .then(() => true, () => false);
+      check(moving, "the player plays by itself");
     } finally {
       await browser.close();
       await server.close();
@@ -324,6 +349,84 @@ try {
       const vp = built ? JSON.parse(built.json).viewport : {};
       const want = size === "full" ? inner : size;
       check(vp.width === want.width && vp.height === want.height, `${size === "full" ? "full screen" : "1600×900"}: recording is the window's size (${vp.width}×${vp.height})`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // The commands you type, run for real one after another — record (on a URL, full screen), titles,
+  // docs, export — like you'd use them. Catches mistakes the checks above can't see.
+  section("Commands, run for real: record → titles → docs → export");
+  {
+    const run = (script, args, env = {}) => {
+      let out = "";
+      const pr = spawn(process.execPath, [`scripts/${script}`, ...args], { env: { ...process.env, ...env } });
+      pr.stdout.on("data", (d) => (out += d));
+      pr.stderr.on("data", (d) => (out += d));
+      const done = new Promise((resolve) => pr.on("exit", (code) => resolve({ ok: code === 0, out: () => out })));
+      return { pr, done, out: () => out };
+    };
+    const until = async (fn, ms) => {
+      for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 200))) if (await fn()) return true;
+      return false;
+    };
+    const name = "_cmd";
+    const url = "http://localhost:5192/harness.html?c=TestBench";
+    const authFile = `.auth/localhost_5192.json`;
+    const guidesDirExisted = fs.existsSync("help-site/docs/guides");
+    temp.push(`tutorials/${name}.tutorial.json`, `public/recordings/${name}.json`, authFile, `videos/${name}.webm`, `help-site/static/recordings/${name}.json`, `help-site/static/videos/${name}.webm`, `help-site/docs/guides/${name}.mdx`);
+    const server = await createServer({ server: { port: 5192, strictPort: true }, logLevel: "silent" });
+    await server.listen();
+    let cdp;
+    try {
+      // npm run record -- --url … _cmd --fullscreen
+      const rec = run("record.mjs", ["--url", url, name, "--fullscreen"], { TK_TEST_CDP_PORT: "9339" });
+      const ready = await until(() => rec.out().includes("Alt+R"), 90000);
+      check(ready, "npm run record starts and asks for Alt+R");
+      if (ready) {
+        cdp = await chromium.connectOverCDP("http://127.0.0.1:9339");
+        const p = cdp.contexts().flatMap((c) => c.pages()).find((x) => x.url().includes("harness.html"));
+        await p.getByRole("button", { name: "Add part" }).waitFor();
+        await p.keyboard.press("Alt+KeyR");
+        await p.waitForTimeout(300);
+        await p.getByRole("button", { name: "Add part" }).click();
+        await p.getByLabel("Part name").click();
+        await p.keyboard.type("Bolt", { delay: 30 });
+        await p.getByRole("dialog").getByRole("button", { name: "Submit" }).click();
+        await p.waitForTimeout(500);
+        await p.keyboard.press("Alt+KeyN");
+        await p.getByLabel("Search").click();
+        await p.keyboard.type("bolt", { delay: 30 });
+        await p.waitForTimeout(500);
+        await p.close(); // = closing the window
+      }
+      const r = await Promise.race([rec.done, new Promise((res) => setTimeout(() => res({ ok: false, out: () => "timed out" }), 120000))]);
+      if (!r.ok) rec.pr.kill();
+      const recJson = fs.existsSync(`public/recordings/${name}.json`) ? JSON.parse(fs.readFileSync(`public/recordings/${name}.json`, "utf8")) : null;
+      check(r.ok && recJson?.steps.length === 2 && fs.existsSync(`tutorials/${name}.tutorial.json`), `npm run record saves the recording and tutorial file (2 steps)${r.ok ? "" : `
+${r.out().slice(-600)}`}`);
+      check(/Size: \d+×\d+/.test(r.out()) && recJson?.viewport.width > 0, "full screen size recorded and reported");
+      check(fs.existsSync(authFile), "login state saved for next time");
+
+      // Edit the tutorial file like you would, then npm run titles / docs / export.
+      const tf = JSON.parse(fs.readFileSync(`tutorials/${name}.tutorial.json`, "utf8"));
+      tf.title = "Command test";
+      tf.steps[0].title = "Add a bolt";
+      fs.writeFileSync(`tutorials/${name}.tutorial.json`, JSON.stringify(tf, null, 2));
+      const titles = await run("titles.mjs", [name]).done;
+      check(titles.ok && JSON.parse(fs.readFileSync(`public/recordings/${name}.json`, "utf8")).steps[0].title === "Add a bolt", "npm run titles works");
+      const exp = await run("export.mjs", [name, "--no-cards", "--scale", "0.5"]).done;
+      const vid = `videos/${name}.webm`;
+      check(exp.ok && fs.existsSync(vid) && fs.statSync(vid).size > 10000, `npm run export makes a video${exp.ok ? "" : `
+${exp.out().slice(-600)}`}`);
+      const docs = await run("docs.mjs", [name]).done;
+      const pageFile = `help-site/docs/guides/${name}.mdx`;
+      check(docs.ok && fs.existsSync(pageFile) && fs.readFileSync(pageFile, "utf8").includes("VideoDownload"), "npm run docs adds the page, with the video");
+    } finally {
+      await cdp?.close().catch(() => {});
+      await server.close();
+      for (const f of temp) fs.rmSync(f, { force: true });
+      if (!guidesDirExisted) fs.rmSync("help-site/docs/guides", { recursive: true, force: true });
+      await new Promise((resolve) => spawn(process.execPath, ["scripts/docs.mjs", "--rebuild-list"]).on("exit", resolve));
     }
   }
 

@@ -21,12 +21,17 @@ type TutorialProps = {
   colors?: Partial<Colors>;
   /** "side" = step cards left of the player (default); "stacked" = player on top, step cards in a row below (narrow columns, docs pages). */
   layout?: "side" | "stacked";
+  /** Step to show first (0 = the first step). */
+  step?: number;
+  /** Open paused this many ms into that step, instead of playing (deep links, tests). */
+  at?: number;
 };
 
-export function Tutorial({ src, zoom, captions, colors, layout = "side" }: TutorialProps) {
+export function Tutorial({ src, zoom, captions, colors, layout = "side", step = 0, at }: TutorialProps) {
   const [rec, setRec] = useState<Recording | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState(step);
+  const [startAt, setStartAt] = useState(at); // cleared once you pick a step
   const [progress, setProgress] = useState(0);
   const playerRef = useRef<PlayerRef>(null);
 
@@ -53,6 +58,10 @@ export function Tutorial({ src, zoom, captions, colors, layout = "side" }: Tutor
 
   if (error) return <p className="tk-error">Couldn't load tutorial: {error}. Did you run <code>npm run record</code>?</p>;
   if (!rec) return <div className="tk-loading">Loading tutorial…</div>;
+  if (active >= rec.steps.length) {
+    setActive(0);
+    return null;
+  }
 
   // Props win over the tutorial file's settings, which win over the defaults.
   const settings = resolveSettings(rec.settings, { zoom, captions, colors });
@@ -61,7 +70,10 @@ export function Tutorial({ src, zoom, captions, colors, layout = "side" }: Tutor
     <ol className="tk-steps">
       {rec.steps.map((s, i) => (
         <li key={i}>
-          <button className={i === active ? "tk-step active" : "tk-step"} onClick={() => setActive(i)}>
+          <button className={i === active ? "tk-step active" : "tk-step"} onClick={() => {
+              setStartAt(undefined);
+              setActive(i);
+            }}>
             <span className="tk-num">{String(i + 1).padStart(2, "0")}</span>
             <span className="tk-text">
               <strong>{s.title}</strong>
@@ -87,7 +99,8 @@ export function Tutorial({ src, zoom, captions, colors, layout = "side" }: Tutor
         fps={FPS}
         compositionWidth={rec.viewport.width}
         compositionHeight={rec.viewport.height}
-        autoPlay
+        autoPlay={startAt === undefined}
+        initialFrame={startAt === undefined ? 0 : Math.min(frames(rec, active) - 1, Math.max(0, Math.round((startAt / 1000) * FPS)))}
         clickToPlay
         style={{ width: "100%" }}
       />

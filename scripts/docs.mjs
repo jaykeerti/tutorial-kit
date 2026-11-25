@@ -16,7 +16,7 @@ import { applyTutorialFile } from "./apply.mjs";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SITE = path.join(ROOT, "help-site");
 const MARKER = "tutorial_kit: generated";
-const VIEWER_FILES = ["Tutorial.tsx", "Tutorial.css", "RrwebClip.tsx", "settings.ts", "time.ts", "types.ts"];
+const VIEWER_FILES = ["Tutorial.tsx", "Tutorial.css", "RrwebClip.tsx", "motion.ts", "settings.ts", "time.ts", "types.ts"];
 
 /** Copy the player from src/viewer into the site (one source of truth; the copy is git-ignored). */
 export function syncViewer() {

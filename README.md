@@ -253,8 +253,9 @@ Name, logo and brand color: `title` in `docusaurus.config.ts`, `help-site/static
 The viewer is one component: `src/viewer/Tutorial.tsx`.
 
 1. In your app: `npm i remotion @remotion/player rrweb` (keep all `remotion` / `@remotion/*` versions identical).
-2. Copy `src/viewer/` (`Tutorial.tsx`, `Tutorial.css`, `RrwebClip.tsx`, `settings.ts`, `time.ts`, `types.ts`) into your app.
+2. Copy `src/viewer/` (`Tutorial.tsx`, `Tutorial.css`, `RrwebClip.tsx`, `motion.ts`, `settings.ts`, `time.ts`, `types.ts`) into your app.
    `layout="stacked"` puts the player on top with the step cards below (good for narrow columns).
+   `step={1}` opens on the 2nd step (0 = the first); `at={1500}` opens it paused 1.5 s in. On the demo page: `?t=<name>&step=2&at=1500` (here 2 = the 2nd step).
 3. Copy the recording JSON into your app's `public/` folder.
 4. Use it:
 
@@ -289,7 +290,7 @@ const Tutorial = React.lazy(() => import("./viewer/Tutorial").then((m) => ({ def
 | `npm run help:build` | Build the help site into `help-site/build/` for hosting |
 | `npm run export [-- <name>]` | Make a video: `videos/<name>.webm` (`--mp4` for MP4) |
 | `npm run capture -- <name> [--watch] [--safe]` | Optional robot replay — see [below](#optional-robot-replay-capture) |
-| `npm run test:recorder` | Self-test on the fixtures |
+| `npm run test:recorder` | Self-test (~2 min): recording, timing, the player, and every command run for real |
 | `npm run typecheck` | TypeScript check |
 
 Viewer URL: `http://localhost:5180/?t=<name>`
