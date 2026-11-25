@@ -277,8 +277,11 @@ try {
     try {
       const v = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
       await v.goto("http://localhost:5187/?t=_film");
-      // The first caption is only on screen for the first few seconds — check it first.
-      check(await v.locator(".tk-caption", { hasText: "Open the Add part dialog" }).first().waitFor({ timeout: 15000 }).then(() => true, () => false), "caption shown while playing");
+      // The first time after npm install, Vite prepares the libraries before the page appears — give it time.
+      await v.locator(".tk-step").first().waitFor({ timeout: 90000 }).catch(() => {});
+      // The first caption is on screen for ~3 s near the start. The player loops through the steps, so
+      // if a slow machine misses it, it comes round again — wait long enough for a full loop.
+      check(await v.locator(".tk-caption", { hasText: "Open the Add part dialog" }).first().waitFor({ timeout: 60000 }).then(() => true, () => false), "caption shown while playing");
       const frame = v.frameLocator(".tk-host iframe");
       const shows = (text, timeout) => frame.getByText(text).first().waitFor({ timeout }).then(() => true, () => false);
       check(await shows("Parts", 15000), "viewer shows the recorded page");
