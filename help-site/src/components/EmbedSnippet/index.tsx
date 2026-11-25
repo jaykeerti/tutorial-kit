@@ -5,7 +5,7 @@ import BrowserOnly from '@docusaurus/BrowserOnly';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import CodeBlock from '@theme/CodeBlock';
 
-function Snippet({name, path}: {name: string; path: string}) {
+function Snippet({name, path, videoUrl}: {name: string; path: string; videoUrl?: string}) {
   const [zoom, setZoom] = useState(true);
   const [captions, setCaptions] = useState(true);
   const q = new URLSearchParams({t: name});
@@ -27,11 +27,21 @@ function Snippet({name, path}: {name: string; path: string}) {
       <p>
         Or link to it directly: <a href={src}>{src}</a>
       </p>
+      {videoUrl ? (
+        <>
+          <p>
+            <strong>As a plain video</strong> (works where iframes aren't allowed, e.g. email-style pages, LMS, intranets;
+            zoom and captions are already in it):
+          </p>
+          <CodeBlock language="html">{`<video src="${window.location.origin}${videoUrl}"\n       controls playsinline preload="metadata"\n       style="width:100%; border-radius:12px"></video>`}</CodeBlock>
+        </>
+      ) : null}
     </div>
   );
 }
 
-export default function EmbedSnippet({name}: {name: string}): React.ReactNode {
+export default function EmbedSnippet({name, video}: {name: string; video?: string}): React.ReactNode {
   const path = useBaseUrl('/embed');
-  return <BrowserOnly>{() => <Snippet name={name} path={path} />}</BrowserOnly>;
+  const videoUrl = useBaseUrl(video ? `/${video}` : '/');
+  return <BrowserOnly>{() => <Snippet name={name} path={path} videoUrl={video ? videoUrl : undefined} />}</BrowserOnly>;
 }

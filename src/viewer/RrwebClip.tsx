@@ -2,7 +2,7 @@
 // For every frame: work out the moment in the recording -> ask rrweb to show the page at that moment
 // -> draw our own smooth cursor on top, zoom the "camera" in around clicks, and show a caption.
 import React, { useLayoutEffect, useRef } from "react";
-import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, continueRender, delayRender, getRemotionEnvironment, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { Replayer } from "rrweb";
 import "rrweb/dist/style.css";
 import { realAt, tutorialAt } from "./time";
@@ -100,6 +100,7 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, captions, colo
   const { fps, durationInFrames } = useVideoConfig();
   const host = useRef<HTMLDivElement>(null);
   const replayer = useRef<Replayer | null>(null);
+  const rendering = getRemotionEnvironment().isRendering;
 
   const s = rec.steps[step];
   const t0 = rec.events[0].timestamp;
@@ -119,7 +120,16 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, captions, colo
       // We show each frame by pausing the replay at that moment, and rrweb freezes CSS animations
       // while paused — rows that fade in would stay invisible, spinners still. Keep them running.
       // (The id selector only raises specificity above rrweb's own rule.)
-      insertStyleRules: [".rrweb-paused *:not(#__tk), .rrweb-paused:not(#__tk) { animation-play-state: running !important; }"],
+      insertStyleRules: [
+        ".rrweb-paused *:not(#__tk), .rrweb-paused:not(#__tk) { animation-play-state: running !important; }",
+        // Video export renders frames much slower than real time, so running animations would land at
+        // random points. Skip them: every frame shows the finished state.
+        ...(rendering
+          ? [
+              "*:not(#__tk), *:not(#__tk)::before, *:not(#__tk)::after { animation-duration: 0s !important; animation-delay: 0s !important; transition-duration: 0s !important; transition-delay: 0s !important; }",
+            ]
+          : []),
+      ],
     });
     replayer.current = r;
     return () => {
@@ -131,8 +141,17 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, captions, colo
 
   // Every frame: jump the replay to exactly this moment.
   useLayoutEffect(() => {
-    replayer.current?.pause(t - t0);
-  }, [t, t0]);
+    const r = replayer.current;
+    r?.pause(t - t0);
+    if (!rendering || !r) return;
+    // Video export: wait for the page's images and fonts before this frame is taken.
+    const h = delayRender("rrweb frame");
+    const doc = r.iframe.contentDocument;
+    const imgs = doc ? [...doc.images].filter((i) => !i.complete) : [];
+    Promise.all([...imgs.map((i) => i.decode().catch(() => {})), doc?.fonts?.ready.catch(() => {})]).then(() =>
+      requestAnimationFrame(() => continueRender(h)),
+    );
+  }, [t, t0, rendering]);
 
   const cursor = (vv: number) => (rec.cursor ? cursorAt(rec, realAt(s, vv)) : filmedCursorAt(rec, s, vv));
   const { x, y } = cursor(v);
@@ -141,7 +160,7 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, captions, colo
   const pressed = clicks.some((c) => v >= c && v < c + 160);
   const fade = Math.min(interpolate(frame, [0, 6], [0, 1], clamp), interpolate(frame, [durationInFrames - 6, durationInFrames - 1], [1, 0], clamp));
 
-  // Camera: zoom in around clicks, centred on the cursor (slightly behind it), never past the page edges.
+  // Camera: zoom in around clicks, centred near the cursor, never past the page edges.
   const { width: W, height: H } = rec.viewport;
   // Zoom on clicks, and keep it for the whole time you're typing.
   const typedUntil = (s.captions ?? [])
@@ -153,7 +172,8 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, captions, colo
     });
   const zoomOn = [...(rec.pointer ? rec.pointer.filter((q) => q.t >= s.start && q.t <= s.end).map((q) => tutorialAt(s, q.t)) : clicks), ...typedUntil];
   const z = zoom && zoom > 1 ? 1 + (zoom - 1) * zoomAmount(zoomOn, v) : 1;
-  const f = cursor(Math.max(0, v - 150));
+  // Aim slightly ahead of the cursor, so zooming in shows where it's heading — not empty space on the way.
+  const f = cursor(v + 500);
   const tx = Math.min(0, Math.max(W - W * z, W / 2 - f.x * z));
   const ty = Math.min(0, Math.max(H - H * z, H / 2 - f.y * z));
 

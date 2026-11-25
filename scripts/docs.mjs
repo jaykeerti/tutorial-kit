@@ -6,6 +6,8 @@
 // For each tutorial: applies your edits from tutorials/<name>.tutorial.json, copies the recording
 // into help-site/static/recordings/, and writes a page help-site/docs/<category>/<name>.mdx with the
 // player and the steps as text. Pages you've edited by hand (marker line removed) are left alone.
+// If you made a video (npm run export), it's copied to help-site/static/videos/ and the page gets a
+// download link and <video> embed code.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,7 +37,23 @@ const slug = (s) =>
 const mdx = (s) => String(s ?? "").replace(/[{}<>]/g, (c) => ({ "{": "&#123;", "}": "&#125;", "<": "&lt;", ">": "&gt;" })[c]);
 const yaml = (s) => JSON.stringify(String(s ?? ""));
 
-function pageFor(name, script, rec) {
+/** The tutorial's video from npm run export (videos/<name>.webm or .mp4), copied into the site. */
+function copyVideo(name) {
+  const to = path.join(SITE, "static", "videos");
+  let found = null;
+  for (const ext of ["webm", "mp4"]) {
+    const src = path.join(ROOT, "videos", `${name}.${ext}`);
+    const dest = path.join(to, `${name}.${ext}`);
+    if (fs.existsSync(src)) {
+      fs.mkdirSync(to, { recursive: true });
+      fs.copyFileSync(src, dest);
+      found ??= { file: `videos/${name}.${ext}`, size: `${(fs.statSync(src).size / 1e6).toFixed(1)} MB` };
+    } else fs.rmSync(dest, { force: true }); // video was deleted: don't keep serving the old one
+  }
+  return found;
+}
+
+function pageFor(name, script, rec, video) {
   const title = script.title || name;
   const lines = [
     "---",
@@ -48,10 +66,13 @@ function pageFor(name, script, rec) {
     "",
     "import TutorialPlayer from '@site/src/components/TutorialPlayer';",
     "import EmbedSnippet from '@site/src/components/EmbedSnippet';",
+    ...(video ? ["import VideoDownload from '@site/src/components/VideoDownload';"] : []),
     "",
   ];
   if (script.description) lines.push(mdx(script.description), "");
-  lines.push(`<TutorialPlayer name=${JSON.stringify(name)} />`, "", "## Steps", "");
+  lines.push(`<TutorialPlayer name=${JSON.stringify(name)} />`, "");
+  if (video) lines.push(`<VideoDownload file=${JSON.stringify(video.file)} size=${JSON.stringify(video.size)} />`, "");
+  lines.push("## Steps", "");
   rec.steps.forEach((s, i) => {
     lines.push(`### ${i + 1}. ${mdx(s.title)}`, "");
     if (s.description) lines.push(mdx(s.description), "");
@@ -61,7 +82,7 @@ function pageFor(name, script, rec) {
       lines.push("");
     }
   });
-  lines.push("---", "", "<details>", "<summary>Embed this guide in another page</summary>", "", `<EmbedSnippet name=${JSON.stringify(name)} />`, "", "</details>", "");
+  lines.push("---", "", "<details>", "<summary>Embed this guide in another page</summary>", "", `<EmbedSnippet name=${JSON.stringify(name)}${video ? ` video=${JSON.stringify(video.file)}` : ""} />`, "", "</details>", "");
   return lines.join("\n");
 }
 
@@ -72,6 +93,7 @@ function publish(name) {
   const recDir = path.join(SITE, "static", "recordings");
   fs.mkdirSync(recDir, { recursive: true });
   fs.copyFileSync(path.join(ROOT, "public", "recordings", `${name}.json`), path.join(recDir, `${name}.json`));
+  const video = copyVideo(name);
 
   // Page → docs/<category>/<name>.mdx
   const category = script.category || "Guides";
@@ -91,8 +113,8 @@ function publish(name) {
   if (fs.existsSync(file) && !fs.readFileSync(file, "utf8").includes(MARKER)) {
     console.log(`  ${name}: recording updated; page ${rel} was edited by hand, so it was left as is.`);
   } else {
-    fs.writeFileSync(file, pageFor(name, script, rec));
-    console.log(`  ${name}: ${rel}  (${rec.steps.length} steps, in "${category}")`);
+    fs.writeFileSync(file, pageFor(name, script, rec, video));
+    console.log(`  ${name}: ${rel}  (${rec.steps.length} steps, in "${category}"${video ? `, video ${video.size}` : ""})`);
   }
   return { name, title: script.title || name, description: script.description || "", category, path: `/${slug(category)}/${name}` };
 }

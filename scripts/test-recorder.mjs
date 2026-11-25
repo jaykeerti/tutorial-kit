@@ -232,6 +232,9 @@ try {
     script.category = "Zz test";
     script.steps[0].actions[1].caption = "Type <b>{x}</b>";
     fs.writeFileSync("tutorials/_film.tutorial.json", JSON.stringify(script, null, 2));
+    // A stand-in for a video from npm run export (real rendering is checked by hand — it takes a minute).
+    fs.mkdirSync("videos", { recursive: true });
+    fs.writeFileSync("videos/_film.webm", "not really a video");
     const docsRun = await new Promise((resolve) => {
       let out = "";
       const pr = spawn(process.execPath, ["scripts/docs.mjs", "_film"]);
@@ -243,6 +246,12 @@ try {
     const body = fs.existsSync(page) ? fs.readFileSync(page, "utf8") : "";
     check(docsRun.ok && body.includes('<TutorialPlayer name="_film" />') && body.includes("### 1. Add a part") && body.includes("Open the Add part dialog"), "npm run docs writes the help page with player and steps");
     check(body.includes("Type &lt;b&gt;&#123;x&#125;&lt;/b&gt;"), "special characters escaped for MDX");
+    check(
+      fs.existsSync("help-site/static/videos/_film.webm") && body.includes('<VideoDownload file="videos/_film.webm"') && body.includes('video="videos/_film.webm"'),
+      "an exported video is copied, with a download link and <video> embed code",
+    );
+    fs.rmSync("videos/_film.webm", { force: true });
+    fs.rmSync("help-site/static/videos/_film.webm", { force: true });
     check(fs.existsSync("help-site/static/recordings/_film.json") && fs.readFileSync("help-site/src/guides.json", "utf8").includes("Film test"), "recording copied and guide listed on the home page");
     // Hand-edited page (marker removed) is not overwritten.
     fs.writeFileSync(page, body.replace("tutorial_kit: generated", "").replace("## Steps", "## Steps (edited)"));

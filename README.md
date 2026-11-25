@@ -23,6 +23,7 @@ like the "how it works" sections on product sites — without screen recording a
 - [Use it on your own app](#use-it-on-your-own-app)
 - [Keyboard shortcuts while recording](#keyboard-shortcuts-while-recording)
 - [Step titles and captions](#step-titles-and-captions)
+- [Video export (WebM / MP4)](#video-export-webm--mp4)
 - [Help site (Docusaurus)](#help-site-docusaurus)
 - [Show the tutorial in your React app](#show-the-tutorial-in-your-react-app)
 - [Commands](#commands)
@@ -152,6 +153,36 @@ Any CSS color works (`"#2563eb"`, `"rgb(37 99 235)"`, `"teal"`). Unknown or inva
 
 ---
 
+## Video export (WebM / MP4)
+
+Make a real video file of a tutorial: for Teams/Slack, email, PowerPoint, an LMS, or any page where
+an `<iframe>` isn't allowed. Same look as the player: zoom, captions, colors and your titles. It also adds a
+title card at the start and a short card before each step.
+
+```bash
+npm run export -- crs-tutorial            # → videos/crs-tutorial.webm
+npm run export                            # every recorded tutorial
+npm run export -- crs-tutorial --mp4      # MP4 (H.264): plays everywhere, incl. PowerPoint and older Safari
+```
+
+| Option | |
+|---|---|
+| `--mp4` | MP4 instead of WebM |
+| `--no-cards` | No title cards, just the steps |
+| `--no-zoom`, `--no-captions` | Turn those off for this video (otherwise the tutorial file's settings are used) |
+| `--scale 0.75` | Smaller video (1 = the size of the window you recorded in) |
+| `--out <folder>` | Where to save (default `videos/`, which git ignores) |
+
+Your edits in the tutorial file are applied first. Rendering takes about a minute per minute of video. The first run
+downloads a headless Chrome for rendering (~100 MB, once).
+
+Run `npm run docs` afterwards and the guide's help page gets a **Download the video** link, plus `<video>` embed code
+in *Embed this guide in another page*.
+
+To put a video on a page yourself: `<video src="crs-tutorial.webm" controls playsinline style="width:100%"></video>`.
+
+---
+
 ## Help site (Docusaurus)
 
 `help-site/` is a [Docusaurus](https://docusaurus.io) site for all your guides: a sidebar, search that works
@@ -244,6 +275,7 @@ const Tutorial = React.lazy(() => import("./viewer/Tutorial").then((m) => ({ def
 | `npm run docs [-- <name>]` | Add/update guides in the help site |
 | `npm run help` | Preview the help site at `http://localhost:3000` |
 | `npm run help:build` | Build the help site into `help-site/build/` for hosting |
+| `npm run export [-- <name>]` | Make a video: `videos/<name>.webm` (`--mp4` for MP4) |
 | `npm run capture -- <name> [--watch] [--safe]` | Optional robot replay — see [below](#optional-robot-replay-capture) |
 | `npm run test:recorder` | Self-test on the fixtures |
 | `npm run typecheck` | TypeScript check |
@@ -379,13 +411,15 @@ tutorial-kit/
 │   ├── lib.mjs              open browser (URL / component), inject rrweb, embed images, recorder state
 │   ├── titles.mjs, apply.mjs  npm run titles (apply your edits to the recording)
 │   ├── docs.mjs             npm run docs (add guides to the help site)
+│   ├── export.mjs           npm run export (WebM / MP4 video)
 │   ├── capture.mjs          optional robot replay
 │   └── test-recorder.mjs    self-test (npm run test:recorder)
 ├── src/
 │   ├── components/          drop components here (component mode); also test fixtures
 │   ├── harness.tsx          mounts a component by name; add providers here
-│   └── viewer/              <Tutorial /> — reuse in your app
-├── help-site/               Docusaurus help site (docs/, static/recordings/, src/components/)
+│   ├── viewer/              <Tutorial /> — reuse in your app
+│   └── video/               the video composition for npm run export
+├── help-site/               Docusaurus help site (docs/, static/recordings/, static/videos/, src/components/)
 ├── tutorials/               step titles + actions (*.tutorial.json); files/ for robot uploads
 ├── public/recordings/       recordings the viewer plays
 ├── .auth/                   saved logins — NEVER commit
@@ -407,6 +441,5 @@ tutorial-kit/
 
 - [ ] Cut out a mistake without recording again
 - [ ] Highlight box around the clicked element
-- [ ] MP4 / WebM export of each step
 - [ ] New-tab support
 - [ ] Publish as an npm package (`npx tutorial-kit record …`)

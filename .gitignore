@@ -12,3 +12,6 @@ capture-failed-*.png
 help-site/src/tutorial-kit/
 help-site/build/
 help-site/.docusaurus/
+
+# videos from npm run export
+/videos/

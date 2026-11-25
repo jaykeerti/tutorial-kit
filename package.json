@@ -14,7 +14,8 @@
     "help:build": "npm --prefix help-site run build",
     "help:serve": "npm --prefix help-site run serve",
     "typecheck": "tsc --noEmit",
-    "test:recorder": "node scripts/test-recorder.mjs"
+    "test:recorder": "node scripts/test-recorder.mjs",
+    "export": "node scripts/export.mjs"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +30,8 @@
     "rrweb": "^2.2.2"
   },
   "devDependencies": {
+    "@remotion/bundler": "^4.0.546",
+    "@remotion/renderer": "^4.0.546",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
