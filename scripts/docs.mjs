@@ -1,7 +1,7 @@
 // npm run docs -- <name> [<name> …]     add/update these tutorials in the help site
 // npm run docs                          add/update every recorded tutorial
-// npm run docs -- --sync-only           only copy the player code into the site (run automatically
-//                                       before the site starts or builds)
+// npm run docs -- --sync-only           copy the player code into the site and update the guides
+//                                       already on it (run automatically before the site starts or builds)
 //
 // For each tutorial: applies your edits from tutorials/<name>.tutorial.json, copies the recording
 // into help-site/static/recordings/, and writes a page help-site/docs/<category>/<name>.mdx with the
@@ -145,9 +145,27 @@ function writeManifest() {
 
 // ---- CLI -------------------------------------------------------------------------------------
 const args = process.argv.slice(2);
+process.chdir(ROOT);
 syncViewer();
 if (args.includes("--sync-only")) {
-  if (!fs.existsSync(path.join(SITE, "src", "guides.json"))) writeManifest();
+  // Before the site starts or builds: bring the guides already on it up to date with your
+  // tutorial files (titles, captions, zoom, colors), so you don't have to remember npm run docs.
+  const onSite = fs.existsSync(path.join(SITE, "static", "recordings"))
+    ? fs
+        .readdirSync(path.join(SITE, "static", "recordings"))
+        .filter((f) => f.endsWith(".json"))
+        .map((f) => f.replace(/\.json$/, ""))
+        .filter((n) => fs.existsSync(`tutorials/${n}.tutorial.json`) && fs.existsSync(`public/recordings/${n}.json`))
+    : [];
+  if (onSite.length) console.log(`Updating ${onSite.length} guide(s) on the help site from your tutorial files:`);
+  for (const n of onSite) {
+    try {
+      publish(n);
+    } catch (e) {
+      console.warn(`  ⚠ ${n}: ${e.message}`);
+    }
+  }
+  if (onSite.length || !fs.existsSync(path.join(SITE, "src", "guides.json"))) writeManifest();
   process.exit(0);
 }
 if (args.includes("--rebuild-list")) {
@@ -155,7 +173,6 @@ if (args.includes("--rebuild-list")) {
   process.exit(0);
 }
 
-process.chdir(ROOT);
 let names = args.filter((a) => !a.startsWith("--"));
 if (!names.length) {
   names = fs

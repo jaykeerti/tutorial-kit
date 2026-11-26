@@ -7,7 +7,7 @@ import { Replayer } from "rrweb";
 import "rrweb/dist/style.css";
 import { realAt, tutorialAt } from "./time";
 import { captionAt, clamp, cursorAt, filmedCursorAt, zoomAmount } from "./motion";
-import type { Colors } from "./settings";
+import { DEFAULT_SETTINGS, type Colors } from "./settings";
 import type { Recording } from "./types";
 
 export type ClipProps = {
@@ -15,12 +15,14 @@ export type ClipProps = {
   step: number;
   /** How far to zoom in around clicks, or false for no zoom. */
   zoom: number | false;
+  /** Follow the tutorial file's per-step / per-action zoom on/off (default). false = use zoom as is everywhere. */
+  zoomPoints?: boolean;
   /** Show captions ("Click “Save”"). */
   captions: boolean;
   colors: Colors;
 };
 
-export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, captions, colors }) => {
+export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, zoomPoints = true, captions, colors }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const host = useRef<HTMLDivElement>(null);
@@ -87,16 +89,23 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, captions, colo
 
   // Camera: zoom in around clicks, centred near the cursor, never past the page edges.
   const { width: W, height: H } = rec.viewport;
+  // Which actions zoom: the action's own on/off, else its step's, else the tutorial's setting.
+  const caps = (s.captions ?? []).filter((c) => c.t >= s.start && c.t <= s.end);
+  const zoomsAt = (c?: { zoom?: boolean }) => (zoomPoints ? (c?.zoom ?? s.zoom ?? zoom !== false) : zoom !== false);
+  // A click that isn't an action itself (into a field before typing) goes with the action after it.
+  const ownerOf = (t: number) => caps.find((c) => c.t >= t) ?? caps.at(-1);
+  const level = zoom || (DEFAULT_SETTINGS.zoom as number); // turned on for one action while off overall: default level
   // Zoom on clicks, and keep it for the whole time you're typing.
-  const typedUntil = (s.captions ?? [])
-    .filter((c) => c.until && c.t >= s.start && c.t <= s.end)
+  const typedUntil = caps
+    .filter((c) => c.until && zoomsAt(c))
     .flatMap((c) => {
       const a = tutorialAt(s, c.t);
       const b = tutorialAt(s, Math.min(c.until!, s.end));
       return Array.from({ length: Math.floor((b - a) / 1000) + 2 }, (_, i) => Math.min(b, a + i * 1000));
     });
-  const zoomOn = [...(rec.pointer ? rec.pointer.filter((q) => q.t >= s.start && q.t <= s.end).map((q) => tutorialAt(s, q.t)) : clicks), ...typedUntil];
-  const z = zoom && zoom > 1 ? 1 + (zoom - 1) * zoomAmount(zoomOn, v) : 1;
+  const clickTimes = rec.pointer ? rec.pointer.filter((q) => q.t >= s.start && q.t <= s.end).map((q) => q.t) : rec.clicks.filter((c) => c >= s.start && c <= s.end);
+  const zoomOn = [...clickTimes.filter((t) => zoomsAt(ownerOf(t))).map((t) => tutorialAt(s, t)), ...typedUntil];
+  const z = level > 1 && zoomOn.length ? 1 + (level - 1) * zoomAmount(zoomOn, v) : 1;
   // Aim slightly ahead of the cursor, so zooming in shows where it's heading — not empty space on the way.
   const f = cursor(v + 500);
   const tx = Math.min(0, Math.max(W - W * z, W / 2 - f.x * z));

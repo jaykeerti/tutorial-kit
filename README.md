@@ -154,7 +154,7 @@ The same file has a `settings` block for the look of the tutorial — also appli
 
 | Setting | Values |
 |---|---|
-| `zoom` | `false` = no zoom, `true` = default, or a level from `1` to `4` (e.g. `1.5`) |
+| `zoom` | `false` = no zoom, `true` = default, or a level from `1` to `4` (e.g. `1.5`). Without `npm run titles`, edits still show on a reload of `npm run dev`, and the next time the help site starts or a video is exported |
 | `captions` | `true` / `false` |
 | `colors.accent` | step cards: active border, number, progress bar |
 | `colors.click` | click ripple |
@@ -162,6 +162,32 @@ The same file has a `settings` block for the look of the tutorial — also appli
 | `colors.captionBg`, `colors.captionText` | caption box and text |
 
 Any CSS color works (`"#2563eb"`, `"rgb(37 99 235)"`, `"teal"`). Unknown or invalid values are reported and ignored.
+
+**Zoom and speed at certain points.** A step or a single action can have its own `zoom` (on/off) and `speed`:
+
+```json
+"steps": [
+  {
+    "title": "Fill in the form",
+    "speed": 2,
+    "actions": [
+      { "caption": "Click “+ New ticket”", "zoom": false },
+      { "caption": "Type “Printer on floor 3 is jammed” in Title", "speed": 3 },
+      { "caption": "Click “High”", "speed": 1 }
+    ]
+  }
+]
+```
+
+| On a step or action | Values |
+|---|---|
+| `zoom` | `true` / `false` — zoom in at this action (or every action in the step). With `"settings": { "zoom": false }`, `true` zooms only where you say. |
+| `speed` | `0.25` to `8` — `2` plays twice as fast, `0.5` at half speed. An action's speed lasts until the next action. |
+
+An action's own value wins over its step's, which wins over `settings`. Speeds are part of the tutorial, so the
+help site and exported videos use them too; viewers can still pick a playback speed with the player's control bar.
+Zoom eases in a moment before each click, so turning zoom off for one action right before another that zooms may
+still show the start of that zoom.
 
 ---
 

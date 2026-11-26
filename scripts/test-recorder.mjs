@@ -237,6 +237,20 @@ try {
     check(applied.ok && rec2.steps[0].title === "Add a part" && rec2.steps[0].captions[0].text === "Open the Add part dialog", "npm run titles applies edited titles and captions");
     check(rec2.settings?.zoom === false && rec2.settings?.colors?.click === "#dc2626" && !("bogus" in rec2.settings.colors), "settings applied (zoom off, colors), invalid ones dropped");
     check(applied.out.includes('unknown color "bogus"'), "warns about an invalid setting");
+    // "zoom": false written at the top of the file (not in "settings") still turns zoom off.
+    writeTutorial("_film", { ...script, zoom: false, settings: { ...script.settings, zoom: 1.8 } });
+    const { applyTutorialFile } = await import("./apply.mjs");
+    applyTutorialFile("_film", { log: () => {}, warn: () => {} });
+    check(JSON.parse(fs.readFileSync("public/recordings/_film.json", "utf8")).settings?.zoom === false, '"zoom": false at the top of the tutorial file turns zoom off too');
+    // Per-step / per-action "speed" and "zoom" reach the recording.
+    writeTutorial("_film", { ...script, steps: script.steps.map((st, i) => (i ? st : { ...st, speed: 2, zoom: false, actions: st.actions.map((a, j) => (j ? a : { ...a, speed: "1.5x", zoom: true })) })) });
+    applyTutorialFile("_film", { log: () => {}, warn: () => {} });
+    const r3 = JSON.parse(fs.readFileSync("public/recordings/_film.json", "utf8"));
+    check(r3.steps[0].speed === 2 && r3.steps[0].zoom === false && r3.steps[0].captions[0].speed === 1.5 && r3.steps[0].captions[0].zoom === true && r3.steps[1].speed === undefined, '"speed" and "zoom" on a step and an action are applied');
+    writeTutorial("_film", { ...script, settings: { ...script.settings, zoom: "false" } });
+    applyTutorialFile("_film", { log: () => {}, warn: () => {} });
+    check(JSON.parse(fs.readFileSync("public/recordings/_film.json", "utf8")).settings?.zoom === false, '"zoom": "false" (in quotes) turns zoom off too');
+    writeTutorial("_film", script);
 
     // Add it to the help site (npm run docs), with characters that would break an MDX page.
     script.title = "Film test";
@@ -291,6 +305,13 @@ try {
         motion.zoomAmount([3000, 6000], 0) === 0 && motion.zoomAmount([3000, 6000], 3000) === 1 && motion.zoomAmount([3000, 6000], 9000) === 0,
         "zoom timing: out at the start, in at a click, out after",
       );
+      // "speed" from the tutorial file: one action, a whole step, and an action back at normal inside it.
+      const sp = (extra, caps) => ({ title: "", description: "", start: 0, end: 10000, timeline: [[0, 0], [10000, 10000]], captions: caps, ...extra });
+      const two = (a, b) => [{ t: 2000, text: "a", ...a }, { t: 6000, text: "b", ...b }];
+      check(
+        time.stepLength(sp({}, two({ speed: 2 }, {}))) === 8000 && time.stepLength(sp({ speed: 2 }, two({}, {}))) === 5000 && time.stepLength(sp({ speed: 2 }, two({}, { speed: 1 }))) === 7000,
+        "speed: an action plays faster until the next one; a step's speed; normal speed inside a faster step",
+      );
       const p0 = film.pointer.find((q) => q.t >= s0.start);
       const at0 = motion.filmedCursorAt(film, s0, time.tutorialAt(s0, p0.t));
       check(Math.abs(at0.x - p0.x) < 1 && Math.abs(at0.y - p0.y) < 1, "cursor is on the click when it happens");
@@ -315,6 +336,35 @@ try {
         .waitForFunction(() => /scaleX\(0\.[0-9]*[1-9]/.test(document.querySelector(".tk-step.active .tk-bar span")?.getAttribute("style") ?? ""), null, { timeout: 90000 })
         .then(() => true, () => false);
       check(moving, "the player plays by itself");
+      // The control bar: pause stops it, speed changes and is remembered.
+      await v.hover(".tk-player");
+      await v.locator(".tk-ctl").first().click();
+      const t1 = await v.locator(".tk-step.active .tk-bar span").getAttribute("style");
+      await v.waitForTimeout(700);
+      const t2 = await v.locator(".tk-step.active .tk-bar span").getAttribute("style");
+      check(t1 === t2 && (await v.locator(".tk-ctl").first().getAttribute("aria-label")) === "Play", "control bar pauses the player");
+      await v.locator(".tk-speed").click();
+      await v.reload();
+      check((await v.locator(".tk-speed").innerText({ timeout: 90000 })).trim() === "1.5×", "speed changes and is remembered");
+      // Zoom per step / per action: step 1 off, but on for its last action.
+      const zoomed = () => v.evaluate(() => /scale\((?!1\))/.test(document.querySelector(".tk-host")?.parentElement?.style.transform ?? ""));
+      const s0clicks = film.pointer.filter((q) => q.t >= s0.start && q.t <= s0.end).map((q) => Math.round(time.tutorialAt(s0, q.t)));
+      const viewAt = async (at) => {
+        await v.goto(`http://localhost:5187/?t=_film&step=1&at=${at}`);
+        await v.locator(".tk-host iframe").waitFor({ timeout: 90000 });
+        await v.waitForTimeout(400);
+        return zoomed();
+      };
+      const zs = JSON.parse(fs.readFileSync("tutorials/_film.tutorial.json", "utf8"));
+      zs.settings.zoom = 1.8;
+      writeTutorial("_film", zs);
+      const before = await viewAt(s0clicks[0]); // the player applies tutorial file edits on reload
+      zs.steps[0].zoom = false;
+      zs.steps[0].actions.at(-1).zoom = true;
+      writeTutorial("_film", zs);
+      const first = await viewAt(s0clicks[0]);
+      const last = await viewAt(s0clicks.at(-1) - 150);
+      check(before && !first && last, `"zoom" per step and per action: step off, its last action on (edits show on reload)`);
     } finally {
       await browser.close();
       await server.close();

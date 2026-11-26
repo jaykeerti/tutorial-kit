@@ -93,7 +93,7 @@ export const TutorialVideo: React.FC<VideoProps> = (props) => {
               ]
             : []),
           <Series.Sequence key={`s${i}`} durationInFrames={steps[i]}>
-            <RrwebClip rec={rec} step={i} zoom={settings.zoom} captions={settings.captions} colors={settings.colors} />
+            <RrwebClip rec={rec} step={i} zoom={settings.zoom} zoomPoints={props.zoom !== false} captions={settings.captions} colors={settings.colors} />
           </Series.Sequence>,
         ])}
       </Series>

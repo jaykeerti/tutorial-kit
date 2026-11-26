@@ -8,8 +8,13 @@ export type Step = {
   end: number;
   /** [tutorialMs, realTimestamp] points — quiet gaps are squeezed. Missing = play in real time. */
   timeline?: [number, number][];
-  /** One per action, at the real time it happened (until = typing finished). Empty text = no caption. */
-  captions?: { t: number; until?: number; text: string }[];
+  /** One per action, at the real time it happened (until = typing finished). Empty text = no caption.
+   *  zoom / speed = this action's own settings from the tutorial file. */
+  captions?: { t: number; until?: number; text: string; zoom?: boolean; speed?: number }[];
+  /** Zoom on/off for this step's actions, from the tutorial file (an action's own setting wins). */
+  zoom?: boolean;
+  /** Play this step faster (2 = twice as fast) or slower (0.5), from the tutorial file. An action's own speed wins. */
+  speed?: number;
 };
 
 export type Recording = {

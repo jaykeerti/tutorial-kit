@@ -265,7 +265,8 @@ export function checkSettings(input) {
   if ("zoom" in input) {
     const z = input.zoom;
     if (z === true || z === false || (typeof z === "number" && z >= 1 && z <= 4)) settings.zoom = z === 1 ? false : z;
-    else problems.push(`"zoom" should be true, false or a number from 1 to 4 (got ${JSON.stringify(z)})`);
+    else if (z === 0 || z === null || z === "false" || z === "off" || z === "none") settings.zoom = false;
+    else problems.push(`"zoom" should be true, false or a number from 1 to 4 (got ${JSON.stringify(z)}) — ignored, so zoom stays on`);
   }
   if ("captions" in input) {
     if (typeof input.captions === "boolean") settings.captions = input.captions;

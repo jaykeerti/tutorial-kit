@@ -14,7 +14,25 @@
 .tk-text span { font-size: 14px; color: #6b7280; line-height: 1.45; }
 .tk-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; }
 .tk-bar span { display: block; height: 100%; background: var(--tk-accent, #7c3aed); transform-origin: left; }
-.tk-player { border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px rgba(15, 23, 42, .18); border: 1px solid #e5e7eb; }
+.tk-player { position: relative; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px rgba(15, 23, 42, .18); border: 1px solid #e5e7eb; }
+/* control bar: a thin see-through strip along the bottom of the player */
+.tk-controls {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 34px; padding: 0 8px; display: flex; align-items: center; gap: 6px;
+  background: linear-gradient(to top, rgba(15, 23, 42, .55), rgba(15, 23, 42, .25)); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  color: #fff; font: 600 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  opacity: 0; transform: translateY(4px); transition: opacity .2s, transform .2s;
+}
+.tk-player:hover .tk-controls, .tk-player.tk-paused .tk-controls, .tk-controls:focus-within { opacity: 1; transform: none; }
+@media (hover: none) { .tk-controls { opacity: 1; transform: none; } }
+/* keep the caption clear of the bar while it shows */
+.tk-player .tk-caption { transition: bottom .2s; }
+.tk-player:hover .tk-caption, .tk-player.tk-paused .tk-caption, .tk-player:focus-within .tk-caption { bottom: max(40px, var(--tk-lift, 40px)) !important; }
+@media (hover: none) { .tk-player .tk-caption { bottom: max(40px, var(--tk-lift, 40px)) !important; } }
+.tk-ctl { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 26px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.tk-ctl:hover { background: rgba(255, 255, 255, .18); }
+.tk-ctl:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.tk-time { font-variant-numeric: tabular-nums; opacity: .9; }
+.tk-speed { margin-left: auto; min-width: 40px; }
 .tk-loading, .tk-error { padding: 40px; text-align: center; color: #6b7280; }
 /* hide rrweb's built-in mouse; we draw our own */
 .tk-host .replayer-mouse, .tk-host .replayer-mouse-tail { display: none !important; }
