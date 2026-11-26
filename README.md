@@ -22,6 +22,7 @@ like the "how it works" sections on product sites — without screen recording a
 - [Quick start (demo)](#quick-start-demo)
 - [Use it on your own app](#use-it-on-your-own-app)
 - [Keyboard shortcuts while recording](#keyboard-shortcuts-while-recording)
+- [The editor (easiest)](#the-editor-easiest)
 - [Step titles and captions](#step-titles-and-captions)
 - [Video export (WebM / MP4)](#video-export-webm--mp4)
 - [Help site (Docusaurus)](#help-site-docusaurus)
@@ -124,6 +125,31 @@ guides the same shape.
 | *close the window* | *close the window* | Finish |
 
 Click inside the page first so it has keyboard focus. The shortcuts never type into fields.
+
+## The editor (easiest)
+
+Everything below — recording, titles, captions, zoom, speed, colors, video, help site — also works from a page,
+with the player showing each change as you make it:
+
+```bash
+npm run dev      →  http://localhost:5180/edit
+```
+
+- **● Record new**: enter the page address and a name, press **Open Chrome**. In that window, log in if needed and
+  go to the first screen, then use the editor's buttons: **Start recording**, **Next step** before each new step,
+  **Stop & save** when done (or **Start over**). Alt+R / Alt+N in the Chrome window still work. The new tutorial
+  opens in the editor.
+- **Tutorial / Look**: page title, description, help site group and position; zoom on/off and level, captions,
+  colors (with color pickers).
+- **Each step and action**: title, description, caption text (empty = hidden), zoom on/off and speed. **▶** shows
+  that moment in the player.
+- **Save** (Ctrl+S / ⌘S) writes `tutorials/<name>.tutorial.json` — the same file you can still edit by hand.
+  **Undo changes** goes back to the last save.
+- **Video & help site**: WebM or MP4, title cards, size, zoom and captions → **Export video** (progress, a
+  preview and a download link). **Add to help site** does `npm run docs` for this tutorial.
+
+The editor only works under `npm run dev` on your computer (it saves files and runs the scripts); it isn't part of
+the help site or a build.
 
 ## Step titles and captions
 
@@ -307,7 +333,7 @@ const Tutorial = React.lazy(() => import("./viewer/Tutorial").then((m) => ({ def
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Viewer + harness at `http://localhost:5180` |
+| `npm run dev` | Viewer + harness at `http://localhost:5180`, the editor at `/edit` |
 | `npm run record -- --url <url> <name>` | Record a tutorial on your running app |
 | `npm run record -- <Component> [name]` | Record on a component from `src/components/` |
 | `npm run titles -- <name>` | Apply titles, captions and settings from `tutorials/<name>.tutorial.json` |
@@ -449,6 +475,8 @@ tutorial-kit/
 │   ├── recorder-client.js   runs in the page while recording: what was clicked, where, how to find it
 │   ├── lib.mjs              open browser (URL / component), inject rrweb, embed images, recorder state
 │   ├── titles.mjs, apply.mjs  npm run titles (apply your edits to the recording)
+│   ├── script-core.mjs      the tutorial-file rules (shared with the editor's live preview)
+│   ├── dev-api.mjs          the editor's save / export / record helpers (npm run dev only)
 │   ├── docs.mjs             npm run docs (add guides to the help site)
 │   ├── export.mjs           npm run export (WebM / MP4 video)
 │   ├── capture.mjs          optional robot replay
@@ -457,6 +485,7 @@ tutorial-kit/
 │   ├── components/          drop components here (component mode); also test fixtures
 │   ├── harness.tsx          mounts a component by name; add providers here
 │   ├── viewer/              <Tutorial /> — reuse in your app
+│   ├── editor/              the editor page (/edit)
 │   └── video/               the video composition for npm run export
 ├── help-site/               Docusaurus help site (docs/, static/recordings/, static/videos/, src/components/)
 ├── tutorials/               step titles + actions (*.tutorial.json); files/ for robot uploads

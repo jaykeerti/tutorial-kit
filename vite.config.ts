@@ -21,6 +21,13 @@ const tutorialFiles = (): Plugin => ({
       }
       next();
     });
+    // The editor page's helpers (save, export, record…): /__tk/…  — see scripts/dev-api.mjs
+    server.middlewares.use(async (req, res, next) => {
+      if (!req.url?.startsWith("/__tk/")) return next();
+      // @ts-expect-error plain JS module
+      const { devApi } = await import("./scripts/dev-api.mjs");
+      devApi(req, res, next);
+    });
   },
 });
 

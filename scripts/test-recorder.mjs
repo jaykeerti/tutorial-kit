@@ -481,6 +481,83 @@ ${exp.out().slice(-600)}`}`);
   }
 
   // ---------------------------------------------------------------------------------------
+  section("Editor page (npm run dev → /edit): Record buttons, edit, save, export, help site");
+  {
+    const name = "_edrec";
+    const port = 5193;
+    const until = async (fn, ms) => {
+      for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 250))) if (await fn()) return true;
+      return false;
+    };
+    const guidesDirExisted = fs.existsSync("help-site/docs/guides");
+    temp.push(`tutorials/${name}.tutorial.json`, `public/recordings/${name}.json`, `.auth/localhost_${port}.json`, `videos/${name}.webm`, `help-site/static/recordings/${name}.json`, `help-site/static/videos/${name}.webm`, `help-site/docs/guides/${name}.mdx`);
+    // The recording the editor starts runs headless, and we drive its Chrome over this port.
+    process.env.TK_TEST_CDP_PORT = "9340";
+    const server = await createServer({ server: { port, strictPort: true }, logLevel: "silent" });
+    await server.listen();
+    const browser = await chromium.launch({ channel: "chrome", headless: true });
+    let cdp;
+    try {
+      const e = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+      await e.goto(`http://localhost:${port}/edit`);
+      const recordBtn = e.getByRole("button", { name: "● Record new" });
+      await recordBtn.waitFor({ timeout: 90000 });
+      if (!(await e.getByLabel("Page address").isVisible())) await recordBtn.click();
+      await e.getByLabel("Page address").fill(`http://localhost:${port}/harness.html?c=TestBench`);
+      await e.getByLabel("Tutorial name").fill(name);
+      await e.getByRole("button", { name: "Open Chrome" }).click();
+      const startBtn = e.getByRole("button", { name: "● Start recording" });
+      const ready = await startBtn.waitFor({ timeout: 90000 }).then(() => true, () => false);
+      check(ready, "Record: opens Chrome and waits for Start");
+      if (ready) {
+        cdp = await chromium.connectOverCDP("http://127.0.0.1:9340");
+        const p = cdp.contexts().flatMap((c) => c.pages()).find((x) => x.url().includes("harness.html"));
+        await p.getByRole("button", { name: "Add part" }).waitFor();
+        await startBtn.click();
+        await e.getByText("Recording — step 1").waitFor({ timeout: 15000 });
+        await p.getByRole("button", { name: "Add part" }).click();
+        await p.getByLabel("Part name").click();
+        await p.keyboard.type("Bolt", { delay: 30 });
+        await p.getByRole("dialog").getByRole("button", { name: "Submit" }).click();
+        const counted = await until(async () => /step 1, [1-9]/.test(await e.locator(".ed-rec-status").innerText()), 10000);
+        await e.getByRole("button", { name: "Next step" }).click();
+        await p.getByLabel("Search").click();
+        await p.keyboard.type("bolt", { delay: 30 });
+        const step2 = await until(async () => /step 2/.test(await e.locator(".ed-rec-status").innerText()), 10000);
+        check(counted && step2, "Record: Start, actions counted, Next step");
+        await e.getByRole("button", { name: "■ Stop & save" }).click();
+        const opened = (await until(() => fs.existsSync(`tutorials/${name}.tutorial.json`), 120000)) && (await until(() => e.url().includes(`t=${name}`), 15000)) && (await e.getByLabel("Step 2 title").waitFor({ timeout: 30000 }).then(() => true, () => false));
+        const recJson = fs.existsSync(`public/recordings/${name}.json`) ? JSON.parse(fs.readFileSync(`public/recordings/${name}.json`, "utf8")) : null;
+        const recLog = opened ? "" : await e.evaluate(async () => { for (let i = 1; i < 9; i++) { const r = await fetch(`/__tk/job/${i}`); if (r.ok) { const j = await r.json(); if (j.kind === "record") return j.log.slice(-1500); } } return "(no log)"; });
+        check(opened && recJson?.steps.length === 2, `Record: Stop & save makes a 2-step tutorial and opens it in the editor${opened ? "" : `
+${recLog}`}`);
+        if (!opened) throw new Error("recording wasn't saved");
+
+        await e.getByLabel("Step 1 title").fill("Add a bolt");
+        await e.getByRole("button", { name: "Save", exact: true }).click();
+        check(await until(() => JSON.parse(fs.readFileSync(`tutorials/${name}.tutorial.json`, "utf8")).steps[0].title === "Add a bolt", 10000), "Save writes the tutorial file");
+
+        await e.getByLabel("Title cards").uncheck();
+        await e.getByLabel("Size").selectOption("0.5");
+        await e.getByRole("button", { name: "Export video" }).click();
+        const made = await e.locator(".ed-done video").waitFor({ timeout: 240000 }).then(() => true, () => false);
+        check(made && fs.existsSync(`videos/${name}.webm`), `Export video makes the video and shows it${made ? "" : `
+${await e.locator(".ed-log").innerText().catch(() => "")}`}`);
+        await e.getByRole("button", { name: "Add to help site" }).click();
+        check(await until(() => fs.existsSync(`help-site/docs/guides/${name}.mdx`), 60000), "Add to help site writes the page");
+      }
+    } finally {
+      delete process.env.TK_TEST_CDP_PORT;
+      await cdp?.close().catch(() => {});
+      await browser.close();
+      await server.close();
+      for (const f of temp) fs.rmSync(f, { force: true });
+      if (!guidesDirExisted) fs.rmSync("help-site/docs/guides", { recursive: true, force: true });
+      await new Promise((resolve) => spawn(process.execPath, ["scripts/docs.mjs", "--rebuild-list"]).on("exit", resolve));
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------
   section("Expired login");
   {
     const server = await createServer({ server: { port: 5185, strictPort: true }, logLevel: "silent" });

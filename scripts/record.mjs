@@ -9,6 +9,8 @@
 //   • press Alt+R (Mac: Option+R) to start recording — press it again to start over
 //   • press Alt+N (Mac: Option+N) before each new step
 //   • close the window when you're done
+// Or use the Record buttons in the editor page (npm run dev → http://localhost:5180/edit): it runs
+// this script and sends "start", "next" and "stop" lines on its input.
 //
 // Options:  --fullscreen   record in a maximized window, at its full size (Mac: the green button
 //                          for real full screen works too — press it before Alt+R)
@@ -39,6 +41,31 @@ const { context, page, pageUrl, close } = await openTarget({ url, component, aut
 // In URL mode, wait until Alt+R (so logging in isn't recorded). Component mode records right away.
 const session = await attachSession(page, { recordingFromStart: !url, maskInputs: argv.includes("--mask-inputs") });
 
+// Commands from the editor page's Record buttons (one per line on stdin): start / next / stop.
+let commands;
+if (!process.stdin.isTTY) {
+  const { createInterface } = await import("node:readline");
+  commands = createInterface({ input: process.stdin });
+  commands.on("line", async (line) => {
+    const cmd = line.trim();
+    try {
+      if (cmd === "start") {
+        await page.bringToFront();
+        await page.evaluate(() => {
+          const w = /** @type {any} */ (window);
+          try {
+            w.rrweb?.record?.takeFullSnapshot?.(true); // the recording starts from the page as it is now
+          } catch {}
+          w.__tk_rec({ action: "start", url: location.href, ts: Date.now() });
+        });
+      } else if (cmd === "next") session.state.handle({ action: "newStep", ts: Date.now() });
+      else if (cmd === "stop") await page.close();
+    } catch (e) {
+      console.warn(`Couldn't ${cmd}: ${e.message}`);
+    }
+  });
+}
+
 await settle(page, pageUrl);
 if (url) {
   console.log("Log in if you need to and go to the screen where the tutorial starts.");
@@ -50,6 +77,8 @@ if (url) {
 }
 
 await page.waitForEvent("close", { timeout: 0 });
+commands?.close();
+console.log("Saving…");
 
 const { state } = session;
 if (url && !state.recording) console.warn("⚠ Alt+R was never pressed, so nothing was recorded.");

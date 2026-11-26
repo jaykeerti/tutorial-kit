@@ -23,7 +23,11 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60))
 
 type TutorialProps = {
   /** The recording JSON. */
-  src: string;
+  src?: string;
+  /** Or the recording itself (the editor's live preview). */
+  recording?: Recording;
+  /** Jump to a moment, paused: change n to jump again (the editor's "show me" buttons). */
+  goto?: { step: number; at: number; n: number };
   /** Zoom around clicks: false = off, true = default (1.8), or a level like 1.5. Overrides the tutorial file. */
   zoom?: number | boolean;
   /** Captions on/off. Overrides the tutorial file. */
@@ -38,7 +42,7 @@ type TutorialProps = {
   at?: number;
 };
 
-export function Tutorial({ src, zoom, captions, colors, layout = "side", step = 0, at }: TutorialProps) {
+export function Tutorial({ src, recording, goto, zoom, captions, colors, layout = "side", step = 0, at }: TutorialProps) {
   const [rec, setRec] = useState<Recording | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(step);
@@ -61,19 +65,46 @@ export function Tutorial({ src, zoom, captions, colors, layout = "side", step = 
   }, [viewW]);
 
   useEffect(() => {
+    if (recording) return setRec(recording);
+    if (!src) return;
     fetch(src)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status} loading ${src}`))))
       .then(setRec)
       .catch((e) => setError(String(e)));
-  }, [src]);
+  }, [src, recording]);
 
+  // Jump to a moment (paused).
+  useEffect(() => {
+    if (!goto) return;
+    if (goto.step !== active) {
+      setStartAt(goto.at);
+      setActive(goto.step);
+    } else {
+      const p = playerRef.current;
+      p?.pause();
+      p?.seekTo(Math.max(0, Math.round((goto.at / 1000) * FPS)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goto?.n]);
+
+  // A new step: start the time and play/pause state from the player.
+  const loaded = rec !== null;
   useEffect(() => {
     const p = playerRef.current;
     if (!p || !rec) return;
     setProgress(p.getCurrentFrame() / Math.max(1, frames(rec, active) - 1));
     setPlaying(p.isPlaying() || startAt === undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, loaded]);
+
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !rec) return;
     const onFrame = (e: { detail: { frame: number } }) => setProgress(e.detail.frame / (frames(rec, active) - 1));
-    const onEnded = () => setActive((a) => (a + 1) % rec.steps.length);
+    const onEnded = () => {
+      setStartAt(undefined); // the next step plays from its start
+      setActive((a) => (a + 1) % rec.steps.length);
+    };
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
     p.addEventListener("frameupdate", onFrame);

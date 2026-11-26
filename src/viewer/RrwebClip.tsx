@@ -64,7 +64,9 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, zoomPoints = t
       replayer.current = null;
       el.innerHTML = "";
     };
-  }, [rec]);
+    // Only a new recording needs a new replayer — not edits to titles, captions or settings.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rec.events]);
 
   // Every frame: jump the replay to exactly this moment.
   useLayoutEffect(() => {

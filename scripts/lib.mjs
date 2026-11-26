@@ -245,43 +245,8 @@ export function createRecorderState({ recordingFromStart, log = console.log }) {
   };
 }
 
-/**
- * Look-and-feel settings written into each tutorial file (edit, then `npm run titles`).
- * Keep in step with DEFAULT_SETTINGS in src/viewer/settings.ts.
- */
-export const DEFAULT_SETTINGS = {
-  zoom: 1.8,
-  captions: true,
-  colors: { accent: "#7c3aed", click: "#7c3aed", cursor: "#111111", captionBg: "rgba(17, 17, 27, 0.86)", captionText: "#ffffff" },
-};
-
-/** Check settings from a tutorial file; returns { settings, problems }. Unknown or invalid values are dropped. */
-export function checkSettings(input) {
-  const problems = [];
-  const settings = {};
-  if (input == null) return { settings, problems };
-  if (typeof input !== "object") return { settings, problems: ['"settings" should be an object'] };
-  for (const k of Object.keys(input)) if (!["zoom", "captions", "colors"].includes(k)) problems.push(`unknown setting "${k}" (ignored)`);
-  if ("zoom" in input) {
-    const z = input.zoom;
-    if (z === true || z === false || (typeof z === "number" && z >= 1 && z <= 4)) settings.zoom = z === 1 ? false : z;
-    else if (z === 0 || z === null || z === "false" || z === "off" || z === "none") settings.zoom = false;
-    else problems.push(`"zoom" should be true, false or a number from 1 to 4 (got ${JSON.stringify(z)}) — ignored, so zoom stays on`);
-  }
-  if ("captions" in input) {
-    if (typeof input.captions === "boolean") settings.captions = input.captions;
-    else problems.push(`"captions" should be true or false`);
-  }
-  if ("colors" in input) {
-    settings.colors = {};
-    for (const [k, v] of Object.entries(input.colors || {})) {
-      if (!(k in DEFAULT_SETTINGS.colors)) problems.push(`unknown color "${k}" — use ${Object.keys(DEFAULT_SETTINGS.colors).join(", ")}`);
-      else if (typeof v !== "string" || !v.trim()) problems.push(`color "${k}" should be a CSS color like "#2563eb"`);
-      else settings.colors[k] = v.trim();
-    }
-  }
-  return { settings, problems };
-}
+// Settings checks live in script-core.mjs (shared with the editor page in the browser).
+export { DEFAULT_SETTINGS, checkSettings } from "./script-core.mjs";
 
 /** Steps as written to tutorials/<name>.tutorial.json: titles + actions (with editable captions), without timing details. */
 export const scriptSteps = (steps) =>
