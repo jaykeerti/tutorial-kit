@@ -557,6 +557,7 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
   const [scale, setScale] = useState(1);
   const [zoom, setZoom] = useState(true);
   const [captions, setCaptions] = useState(true);
+  const [stepLabel, setStepLabel] = useState(true);
   const [err, setErr] = useState("");
   const [job, setJob] = useJob();
   const [docs, setDocs] = useJob();
@@ -566,7 +567,7 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
     setErr("");
     if (dirty && !(await save())) return;
     try {
-      const { job: id } = await api<{ job: string }>(`export/${encodeURIComponent(name)}`, "POST", { format, cards, scale, zoom, captions });
+      const { job: id } = await api<{ job: string }>(`export/${encodeURIComponent(name)}`, "POST", { format, cards, scale, zoom, captions, stepLabel });
       setJob({ id, running: true, ok: false, percent: 0, log: "" });
     } catch (e) {
       setErr((e as Error).message);
@@ -612,6 +613,9 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
         </label>
         <label>
           <input type="checkbox" checked={captions} onChange={(e) => setCaptions(e.target.checked)} /> Captions
+        </label>
+        <label title="“Step 2 of 3 · title” in the top-left corner while each step plays">
+          <input type="checkbox" checked={stepLabel} onChange={(e) => setStepLabel(e.target.checked)} /> Step label
         </label>
       </div>
       <div className="ed-row ed-row-tight">

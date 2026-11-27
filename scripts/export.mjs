@@ -5,6 +5,7 @@
 //   --mp4            MP4 (H.264) instead of WebM — plays everywhere, incl. PowerPoint and older Safari
 //   --no-cards       no title cards (intro and before each step)
 //   --no-zoom        no zoom on clicks          --no-captions   no captions
+//   --no-step-label  no "Step 2 of 3 · title" in the corner
 //   --scale 0.75     smaller video (1 = the recorded window size)
 //   --out <folder>   where to put the videos (default videos/)
 //
@@ -99,6 +100,7 @@ for (const { name, script } of jobs) {
     cards: !flag("--no-cards"),
     ...(flag("--no-zoom") ? { zoom: false } : {}),
     ...(flag("--no-captions") ? { captions: false } : {}),
+    stepLabel: !flag("--no-step-label"),
   };
   const out = path.join(outDir, `${name}.${ext}`);
   try {

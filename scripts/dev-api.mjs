@@ -147,6 +147,7 @@ export async function devApi(req, res, next) {
       const args = [at("scripts", "export.mjs"), name, ...(mp4 ? ["--mp4"] : []), ...(o.cards === false ? ["--no-cards"] : []), "--scale", String(scale)];
       if (o.zoom === false) args.push("--no-zoom");
       if (o.captions === false) args.push("--no-captions");
+      if (o.stepLabel === false) args.push("--no-step-label");
       const job = startJob("export", args);
       job.done = (j) => {
         const file = `${name}.${mp4 ? "mp4" : "webm"}`;

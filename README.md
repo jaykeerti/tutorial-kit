@@ -149,7 +149,7 @@ npm run dev      →  http://localhost:5180/edit
   that moment in the player.
 - **Save** (Ctrl+S / ⌘S) writes `tutorials/<name>.tutorial.json` — the same file you can still edit by hand.
   **Undo changes** goes back to the last save.
-- **Video & help site**: WebM or MP4, title cards, size, zoom and captions → **Export video** (progress, a
+- **Video & help site**: WebM or MP4, title cards, size, zoom, captions and the step label → **Export video** (progress, a
   preview and a download link). **Add to help site** does `npm run docs` for this tutorial.
 
 The editor only works under `npm run dev` on your computer (it saves files and runs the scripts); it isn't part of
@@ -238,6 +238,7 @@ npm run export -- crs-tutorial --mp4      # MP4 (H.264): plays everywhere, incl.
 | `--mp4` | MP4 instead of WebM |
 | `--no-cards` | No title cards, just the steps |
 | `--no-zoom`, `--no-captions` | Turn those off for this video (otherwise the tutorial file's settings are used) |
+| `--no-step-label` | No “Step 2 of 3 · title” label in the top-left corner (shown by default) |
 | `--scale 0.75` | Smaller video (1 = the size of the window you recorded in) |
 | `--out <folder>` | Where to save (default `videos/`, which git ignores) |
 
