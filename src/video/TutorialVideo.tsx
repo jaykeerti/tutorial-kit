@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { AbsoluteFill, Easing, Series, continueRender, delayRender, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { RrwebClip } from "../viewer/RrwebClip";
 import { resolveSettings, type Colors } from "../viewer/settings";
-import { stepLength } from "../viewer/time";
+import { shownSteps, stepLength } from "../viewer/time";
 import type { Recording } from "../viewer/types";
 
 export const FPS = 30;
@@ -28,7 +28,9 @@ export const loadRecording = (name: string) => {
   if (!cache.has(name))
     cache.set(
       name,
-      fetch(staticFile(`recordings/${name}.json`)).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status} loading ${name}`)))),
+      fetch(staticFile(`recordings/${name}.json`))
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status} loading ${name}`))))
+        .then((r: Recording) => shownSteps(r)), // deleted steps aren't in the video
     );
   return cache.get(name)!;
 };
@@ -36,7 +38,7 @@ export const loadRecording = (name: string) => {
 const clipFrames = (rec: Recording, i: number) => Math.max(1, Math.ceil((stepLength(rec.steps[i]) / 1000) * FPS));
 export const videoFrames = (rec: Recording, p: Pick<VideoProps, "cards">) => {
   const steps = rec.steps.map((_, i) => clipFrames(rec, i));
-  return { steps, total: (p.cards ? INTRO + CARD * steps.length : 0) + steps.reduce((a, b) => a + b, 0) };
+  return { steps, total: Math.max(1, (p.cards ? INTRO + CARD * steps.length : 0) + steps.reduce((a, b) => a + b, 0)) };
 };
 
 const ease = Easing.out(Easing.cubic);

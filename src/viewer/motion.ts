@@ -1,7 +1,7 @@
 // What the player shows at each moment: where the cursor is, how far zoomed in, which caption.
 // Plain functions of time (no rendering), so they behave the same on every machine and are tested directly.
 import { Easing, interpolate } from "remotion";
-import { tutorialAt } from "./time";
+import { isCut, tutorialAt } from "./time";
 import type { Recording, Step } from "./types";
 
 export const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
@@ -18,7 +18,7 @@ export const filmedCursorAt = (rec: Recording, s: Step, v: number) => {
   let from = before ?? { x: rec.viewport.width / 2, y: rec.viewport.height * 0.6 };
   let fromV = 0;
   for (const q of p) {
-    if (q.t < s.start) continue;
+    if (q.t < s.start || isCut(s, q.t)) continue; // deleted actions' clicks: glide straight past them
     if (q.t > s.end) break;
     const qv = tutorialAt(s, q.t);
     if (v <= qv) {
@@ -70,7 +70,7 @@ export const zoomAmount = (clickTimes: number[], v: number) => {
 /** The caption showing at tutorial time v (each shows from just before its action, for up to 3 s). */
 export const captionAt = (s: Step, v: number) => {
   const caps = (s.captions ?? [])
-    .filter((c) => c.text && c.t >= s.start - 1 && c.t <= s.end)
+    .filter((c) => c.text && !c.deleted && c.t >= s.start - 1 && c.t <= s.end)
     .map((c) => ({ v: tutorialAt(s, c.t), until: tutorialAt(s, c.until ?? c.t), text: c.text }));
   for (let i = 0; i < caps.length; i++) {
     const start = caps[i].v - 250;

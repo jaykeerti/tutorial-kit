@@ -4,7 +4,7 @@ import { Player, PlayerRef } from "@remotion/player";
 import { useEffect, useRef, useState } from "react";
 import { RrwebClip } from "./RrwebClip";
 import { resolveSettings, type Colors } from "./settings";
-import { stepLength } from "./time";
+import { shownSteps, stepLength } from "./time";
 import type { Recording } from "./types";
 import "./Tutorial.css";
 
@@ -66,11 +66,11 @@ export function Tutorial({ src, recording, goto, zoom, captions, colors, layout 
   }, [viewW]);
 
   useEffect(() => {
-    if (recording) return setRec(recording);
+    if (recording) return setRec(shownSteps(recording));
     if (!src) return;
     fetch(src)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status} loading ${src}`))))
-      .then(setRec)
+      .then((r: Recording) => setRec(shownSteps(r)))
       .catch((e) => setError(String(e)));
   }, [src, recording]);
 
@@ -122,6 +122,7 @@ export function Tutorial({ src, recording, goto, zoom, captions, colors, layout 
 
   if (error) return <p className="tk-error">Couldn't load tutorial: {error}. Did you run <code>npm run record</code>?</p>;
   if (!rec) return <div className="tk-loading">Loading tutorial…</div>;
+  if (!rec.steps.length) return <p className="tk-error">Every step of this tutorial is deleted.</p>;
   if (active >= rec.steps.length) {
     setActive(0);
     return null;

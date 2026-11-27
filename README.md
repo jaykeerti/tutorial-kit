@@ -139,14 +139,18 @@ npm run dev      →  http://localhost:5180/edit
   go to the first screen, then use the editor's buttons: **Start recording**, **Next step** before each new step,
   **Stop & save** when done (or **Start over**). Alt+R / Alt+N in the Chrome window still work. The new tutorial
   opens in the editor.
-- **⇪ Import**: drop in a recording (`public/recordings/<name>.json`) from another computer or a colleague, plus its
-  `<name>.tutorial.json` if you have it (otherwise one is made from the recording). It opens in the editor.
+- **⇪ Import**: a recording (`public/recordings/<name>.json`) from another computer or a colleague, plus its
+  `<name>.tutorial.json` if you have it (otherwise one is made from the recording) — each in its own box, so they can
+  come from different folders. It opens in the editor.
 - **Preview**: stays in view while you scroll the form. Its control bar has play/pause, a seek bar (click, drag, or
   ←/→ for a second), the time and the speed.
 - **Tutorial / Look**: page title, description, help site group and position; zoom on/off and level, captions,
   colors (with color pickers).
 - **Each step and action**: title, description, caption text (empty = hidden), zoom on/off and speed. **▶** shows
   that moment in the player.
+- **Delete step** / **✕** on an action: a deleted step is left out of the player, the video and the help site. A
+  deleted action is cut out — the video jumps from just before it to the next action (what it changed on the page
+  stays, e.g. typed text). Both stay listed, greyed out, with **Restore**; the recording itself isn't changed.
 - **Save** (Ctrl+S / ⌘S) writes `tutorials/<name>.tutorial.json` — the same file you can still edit by hand.
   **Undo changes** goes back to the last save.
 - **Video & help site**: WebM or MP4, title cards, size, zoom, captions and the step label → **Export video** (progress, a
@@ -213,6 +217,7 @@ Any CSS color works (`"#2563eb"`, `"rgb(37 99 235)"`, `"teal"`). Unknown or inva
 |---|---|
 | `zoom` | `true` / `false` — zoom in at this action (or every action in the step). With `"settings": { "zoom": false }`, `true` zooms only where you say. |
 | `speed` | `0.25` to `8` — `2` plays twice as fast, `0.5` at half speed. An action's speed lasts until the next action. |
+| `deleted` | `true` — leave the step out, or cut the action out of the video (until the next action) |
 
 An action's own value wins over its step's, which wins over `settings`. Speeds are part of the tutorial, so the
 help site and exported videos use them too; viewers can still pick a playback speed with the player's control bar.

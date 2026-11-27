@@ -62,6 +62,31 @@ export function speedOf(v, where, warn) {
   return undefined;
 }
 
+/**
+ * The stretches of a step's film that deleted actions cover (real timestamps): from the action — or a
+ * click just before it that belongs to it, like clicking into the field you then typed in — to the next
+ * action (or the end of the step).
+ */
+function cutsFor(s, pointer) {
+  const caps = [...(s.captions ?? [])].filter((c) => c.t >= s.start && c.t <= s.end).sort((a, b) => a.t - b.t);
+  if (!caps.some((c) => c.deleted)) return [];
+  const isAction = new Set(caps.map((c) => c.t));
+  const startOf = caps.map((c, j) => {
+    const prev = j ? caps[j - 1].t : s.start - 1;
+    const own = pointer.filter((q) => q.t > prev && q.t < c.t && !isAction.has(q.t)).map((q) => q.t);
+    return Math.min(c.t, ...own);
+  });
+  const cuts = [];
+  caps.forEach((c, j) => {
+    if (!c.deleted) return;
+    const span = [startOf[j], j < caps.length - 1 ? startOf[j + 1] : s.end];
+    const last = cuts.at(-1);
+    if (last && span[0] <= last[1]) last[1] = Math.max(last[1], span[1]);
+    else if (span[1] > span[0]) cuts.push(span);
+  });
+  return cuts;
+}
+
 /** Does this look like a recording (what the player plays)? */
 export const isRecording = (x) => !!x && typeof x === "object" && Array.isArray(x.events) && x.events.length > 0 && Array.isArray(x.steps) && x.steps.length > 0 && !!x.viewport;
 /** Does this look like a tutorial file (titles, captions, settings)? */
@@ -109,8 +134,13 @@ export function applyScript(rec0, script, warn = () => {}, label = "the tutorial
     const sp = speedOf(from.speed, `step ${i + 1}`, warn);
     if (sp === undefined) delete s.speed;
     else s.speed = sp;
+    // Deleted ("deleted": true): the step is skipped; an action is cut out of the video.
+    if (from.deleted === true) s.deleted = true;
+    else delete s.deleted;
     // Captions: matched to the actions in order. Set "caption": "" to hide one.
     s.captions.forEach((c, j) => {
+      if (from.actions?.[j]?.deleted === true) c.deleted = true;
+      else delete c.deleted;
       const a = from.actions?.[j];
       if (a && typeof a.caption === "string") c.text = a.caption;
       const z = onOff(a?.zoom, `step ${i + 1}, action ${j + 1}`, warn);
@@ -121,6 +151,11 @@ export function applyScript(rec0, script, warn = () => {}, label = "the tutorial
       else c.speed = v;
     });
   });
+  for (const s of rec.steps) {
+    const cuts = cutsFor(s, rec.pointer ?? []);
+    if (cuts.length) s.cuts = cuts;
+    else delete s.cuts;
+  }
   // Settings: zoom, captions, colors.
   // Also accepted at the top of the file, next to "title" (an easy slip) — and then it wins over
   // the "settings" block, since you most likely added it on purpose.

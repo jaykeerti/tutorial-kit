@@ -5,7 +5,7 @@ import React, { useLayoutEffect, useRef } from "react";
 import { AbsoluteFill, continueRender, delayRender, getRemotionEnvironment, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { Replayer } from "rrweb";
 import "rrweb/dist/style.css";
-import { realAt, tutorialAt } from "./time";
+import { isCut, realAt, tutorialAt } from "./time";
 import { captionAt, clamp, cursorAt, filmedCursorAt, zoomAmount } from "./motion";
 import { DEFAULT_SETTINGS, type Colors } from "./settings";
 import type { Recording } from "./types";
@@ -93,7 +93,7 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, zoomPoints = t
   const cursor = (vv: number) => (rec.cursor ? cursorAt(rec, realAt(s, vv)) : filmedCursorAt(rec, s, vv));
   const { x, y } = cursor(v);
   // Click times in tutorial time, for this step only.
-  const clicks = rec.clicks.filter((c) => c >= s.start && c <= s.end).map((c) => tutorialAt(s, c));
+  const clicks = rec.clicks.filter((c) => c >= s.start && c <= s.end && !isCut(s, c)).map((c) => tutorialAt(s, c));
   const pressed = clicks.some((c) => v >= c && v < c + 160);
   const fade = Math.min(interpolate(frame, [0, 6], [0, 1], clamp), interpolate(frame, [durationInFrames - 6, durationInFrames - 1], [1, 0], clamp));
 
@@ -101,7 +101,7 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, zoomPoints = t
   const { width: W, height: H } = rec.viewport;
   // Which actions zoom: the action's own on/off, else its step's, else the tutorial's setting.
   const caps = (s.captions ?? []).filter((c) => c.t >= s.start && c.t <= s.end);
-  const zoomsAt = (c?: { zoom?: boolean }) => (zoomPoints ? (c?.zoom ?? s.zoom ?? zoom !== false) : zoom !== false);
+  const zoomsAt = (c?: { zoom?: boolean; deleted?: boolean }) => !c?.deleted && (zoomPoints ? (c?.zoom ?? s.zoom ?? zoom !== false) : zoom !== false);
   // A click that isn't an action itself (into a field before typing) goes with the action after it.
   const ownerOf = (t: number) => caps.find((c) => c.t >= t) ?? caps.at(-1);
   const level = zoom || (DEFAULT_SETTINGS.zoom as number); // turned on for one action while off overall: default level
@@ -114,7 +114,7 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, zoomPoints = t
       return Array.from({ length: Math.floor((b - a) / 1000) + 2 }, (_, i) => Math.min(b, a + i * 1000));
     });
   const clickTimes = rec.pointer ? rec.pointer.filter((q) => q.t >= s.start && q.t <= s.end).map((q) => q.t) : rec.clicks.filter((c) => c >= s.start && c <= s.end);
-  const zoomOn = [...clickTimes.filter((t) => zoomsAt(ownerOf(t))).map((t) => tutorialAt(s, t)), ...typedUntil];
+  const zoomOn = [...clickTimes.filter((t) => !isCut(s, t) && zoomsAt(ownerOf(t))).map((t) => tutorialAt(s, t)), ...typedUntil];
   const z = level > 1 && zoomOn.length ? 1 + (level - 1) * zoomAmount(zoomOn, v) : 1;
   // Aim slightly ahead of the cursor, so zooming in shows where it's heading — not empty space on the way.
   const f = cursor(v + 500);

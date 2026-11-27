@@ -73,10 +73,10 @@ function pageFor(name, script, rec, video) {
   lines.push(`<TutorialPlayer name=${JSON.stringify(name)} />`, "");
   if (video) lines.push(`<VideoDownload file=${JSON.stringify(video.file)} size=${JSON.stringify(video.size)} />`, "");
   lines.push("## Steps", "");
-  rec.steps.forEach((s, i) => {
+  rec.steps.filter((s) => !s.deleted).forEach((s, i) => {
     lines.push(`### ${i + 1}. ${mdx(s.title)}`, "");
     if (s.description) lines.push(mdx(s.description), "");
-    const caps = (s.captions ?? []).map((c) => c.text).filter(Boolean);
+    const caps = (s.captions ?? []).filter((c) => !c.deleted).map((c) => c.text).filter(Boolean);
     if (caps.length) {
       caps.forEach((c, j) => lines.push(`${j + 1}. ${mdx(c)}`));
       lines.push("");
@@ -114,7 +114,7 @@ function publish(name) {
     console.log(`  ${name}: recording updated; page ${rel} was edited by hand, so it was left as is.`);
   } else {
     fs.writeFileSync(file, pageFor(name, script, rec, video));
-    console.log(`  ${name}: ${rel}  (${rec.steps.length} steps, in "${category}"${video ? `, video ${video.size}` : ""})`);
+    console.log(`  ${name}: ${rel}  (${rec.steps.filter((s) => !s.deleted).length} steps, in "${category}"${video ? `, video ${video.size}` : ""})`);
   }
   return { name, title: script.title || name, description: script.description || "", category, path: `/${slug(category)}/${name}` };
 }

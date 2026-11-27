@@ -10,7 +10,11 @@ export type Step = {
   timeline?: [number, number][];
   /** One per action, at the real time it happened (until = typing finished). Empty text = no caption.
    *  zoom / speed = this action's own settings from the tutorial file. */
-  captions?: { t: number; until?: number; text: string; zoom?: boolean; speed?: number }[];
+  captions?: { t: number; until?: number; text: string; zoom?: boolean; speed?: number; deleted?: boolean }[];
+  /** Skipped everywhere (the tutorial file says "deleted": true). */
+  deleted?: boolean;
+  /** Stretches of the film cut out because their actions were deleted (real timestamps). */
+  cuts?: [number, number][];
   /** Zoom on/off for this step's actions, from the tutorial file (an action's own setting wins). */
   zoom?: boolean;
   /** Play this step faster (2 = twice as fast) or slower (0.5), from the tutorial file. An action's own speed wins. */

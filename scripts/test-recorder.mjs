@@ -249,6 +249,14 @@ try {
     applyTutorialFile("_film", { log: () => {}, warn: () => {} });
     const r3 = JSON.parse(fs.readFileSync("public/recordings/_film.json", "utf8"));
     check(r3.steps[0].speed === 2 && r3.steps[0].zoom === false && r3.steps[0].captions[0].speed === 1.5 && r3.steps[0].captions[0].zoom === true && r3.steps[1].speed === undefined, '"speed" and "zoom" on a step and an action are applied');
+    writeTutorial("_film", { ...script, steps: script.steps.map((st, i) => (i ? { ...st, deleted: true } : { ...st, actions: st.actions.map((a, j) => (j === 1 ? { ...a, deleted: true } : a)) })) });
+    applyTutorialFile("_film", { log: () => {}, warn: () => {} });
+    const r4 = JSON.parse(fs.readFileSync("public/recordings/_film.json", "utf8"));
+    const c1 = r4.steps[0].captions[1];
+    check(
+      r4.steps[1].deleted === true && c1.deleted === true && r4.steps[0].cuts?.length === 1 && r4.steps[0].cuts[0][0] <= c1.t && r4.steps[0].cuts[0][1] > c1.t && r4.steps.length === 2,
+      '"deleted" on a step and an action: kept in the recording, the action\'s stretch marked as cut',
+    );
     writeTutorial("_film", { ...script, settings: { ...script.settings, zoom: "false" } });
     applyTutorialFile("_film", { log: () => {}, warn: () => {} });
     check(JSON.parse(fs.readFileSync("public/recordings/_film.json", "utf8")).settings?.zoom === false, '"zoom": "false" (in quotes) turns zoom off too');
@@ -314,6 +322,9 @@ try {
         time.stepLength(sp({}, two({ speed: 2 }, {}))) === 8000 && time.stepLength(sp({ speed: 2 }, two({}, {}))) === 5000 && time.stepLength(sp({ speed: 2 }, two({}, { speed: 1 }))) === 7000,
         "speed: an action plays faster until the next one; a step's speed; normal speed inside a faster step",
       );
+      const cutStep = sp({ cuts: [[2000, 6000]] }, two({ deleted: true }, {}));
+      check(time.stepLength(cutStep) === 6000 && time.tutorialAt(cutStep, 6000) === 2000 && time.isCut(cutStep, 3000) && !time.isCut(cutStep, 6000), "a deleted action's stretch takes no time");
+      check(time.shownSteps({ steps: [{ title: "a" }, { title: "b", deleted: true }] }).steps.length === 1, "deleted steps are left out of the player and the video");
       const p0 = film.pointer.find((q) => q.t >= s0.start);
       const at0 = motion.filmedCursorAt(film, s0, time.tutorialAt(s0, p0.t));
       check(Math.abs(at0.x - p0.x) < 1 && Math.abs(at0.y - p0.y) < 1, "cursor is on the click when it happens");
@@ -561,6 +572,31 @@ ${recLog}`}`);
         await e.getByRole("button", { name: "Save", exact: true }).click();
         check(await until(() => JSON.parse(fs.readFileSync(`tutorials/${name}.tutorial.json`, "utf8")).steps[0].title === "Add a bolt", 10000), "Save writes the tutorial file");
 
+        // Delete an action, and a step; restore them.
+        const len1 = async () => Number((await e.locator(".ed-card-meta").first().innerText()).match(/[\d.]+/)[0]);
+        const before = await len1();
+        // (the step's last action: its stretch runs to the end of the step, so the cut is always visible)
+        await e.getByRole("button", { name: /^Delete step 1, action \d+$/ }).last().click();
+        const shorter = await until(async () => (await len1()) < before, 5000);
+        await e.getByRole("button", { name: "Delete step", exact: true }).nth(1).click();
+        const oneCard = await until(async () => (await e.locator(".tk-step").count()) === 1, 5000);
+        await e.getByRole("button", { name: "Save", exact: true }).click();
+        const savedDel = await until(() => {
+          const t = JSON.parse(fs.readFileSync(`tutorials/${name}.tutorial.json`, "utf8"));
+          return t.steps[0].actions.at(-1).deleted === true && t.steps[1].deleted === true;
+        }, 10000);
+        check(shorter && oneCard && savedDel, `Delete an action (step gets shorter) and a step (player leaves it out), then Save${shorter && oneCard && savedDel ? "" : ` (shorter ${shorter}, one card ${oneCard}, saved ${savedDel}; ${await e.locator(".ed-msg").allInnerTexts()})`}`);
+        await e.getByRole("button", { name: "Restore step" }).click();
+        await e.getByRole("button", { name: "Restore", exact: true }).click();
+        await e.getByRole("button", { name: "Save", exact: true }).click();
+        check(
+          await until(() => {
+            const t = JSON.parse(fs.readFileSync(`tutorials/${name}.tutorial.json`, "utf8"));
+            return !t.steps[0].actions.at(-1).deleted && !t.steps[1].deleted;
+          }, 10000) && (await until(async () => (await e.locator(".tk-step").count()) === 2, 5000)),
+          "Restore brings them back",
+        );
+
         await e.getByLabel("Title cards").uncheck();
         await e.getByLabel("Size").selectOption("0.5");
         await e.getByRole("button", { name: "Export video" }).click();
@@ -578,10 +614,9 @@ ${await e.locator(".ed-log").innerText().catch(() => "")}`}`);
         fs.copyFileSync(`tutorials/${name}.tutorial.json`, path.join(dir, `${imp}.tutorial.json`));
         fs.writeFileSync(path.join(dir, "other.json"), JSON.stringify({ hello: 1 }));
         await e.getByRole("button", { name: "⇪ Import" }).click();
-        const input = e.getByLabel("Choose JSON files to import");
-        await input.setInputFiles([path.join(dir, "other.json")]);
+        await e.getByLabel("Choose the recording").setInputFiles([path.join(dir, "other.json")]);
         check(await e.getByText("not a tutorial-kit recording or tutorial file").waitFor({ timeout: 5000 }).then(() => true, () => false), "Import: a JSON that isn't ours is turned away");
-        await input.setInputFiles([path.join(dir, `${imp}.json`)]);
+        await e.getByLabel("Choose the recording").setInputFiles([path.join(dir, `${imp}.json`)]);
         await e.getByRole("button", { name: "Import", exact: true }).click();
         const madeOk = await until(() => e.url().includes(`t=${imp}`), 15000);
         const madeScript = fs.existsSync(`tutorials/${imp}.tutorial.json`) ? JSON.parse(fs.readFileSync(`tutorials/${imp}.tutorial.json`, "utf8")) : null;
@@ -592,7 +627,11 @@ ${await e.locator(".ed-log").innerText().catch(() => "")}`}`);
         withTitle.title = "Imported with its file";
         fs.writeFileSync(path.join(dir, `${imp}.tutorial.json`), JSON.stringify(withTitle));
         await e.getByRole("button", { name: "⇪ Import" }).click();
-        await e.getByLabel("Choose JSON files to import").setInputFiles([path.join(dir, `${imp}.json`), path.join(dir, `${imp}.tutorial.json`)]);
+        // One at a time, as from two different folders.
+        await e.getByLabel("Choose the recording").setInputFiles([path.join(dir, `${imp}.json`)]);
+        await e.getByText(`${imp}.json`, { exact: true }).waitFor({ timeout: 5000 });
+        await e.getByLabel("Choose the tutorial file").setInputFiles([path.join(dir, `${imp}.tutorial.json`)]);
+        await e.getByText(`${imp}.tutorial.json`, { exact: true }).waitFor({ timeout: 5000 });
         // (names starting with _ aren't in the editor's list, so it may not say "and replace")
         await e.getByRole("button", { name: /^Import( and replace)?$/ }).click();
         check(await until(() => JSON.parse(fs.readFileSync(`tutorials/${imp}.tutorial.json`, "utf8")).title === "Imported with its file", 15000), "Import: recording + tutorial file, replacing an existing one");

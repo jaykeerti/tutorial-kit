@@ -124,3 +124,20 @@
 .ed-picked { margin: 0 0 10px; padding-left: 18px; }
 .ed-picked li { margin: 4px 0; }
 .ed code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #f1f5f9; border-radius: 4px; padding: 1px 4px; }
+.ed-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 10px; }
+.ed-slot { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.ed-slot .ed-drop { width: 100%; margin: 0; min-height: 96px; }
+.ed-slot-title { font-size: 12px; font-weight: 600; color: #374151; }
+.ed-drop small { font-weight: 400; color: #6b7280; }
+.ed-drop.ed-got { border-style: solid; border-color: #6ee7b7; background: #ecfdf5; color: #065f46; }
+
+/* deleted steps and actions */
+.ed-btn.ed-danger { color: #b91c1c; }
+.ed-btn.ed-danger:hover:not(:disabled) { border-color: #fca5a5; background: #fef2f2; }
+.ed-card.ed-deleted { background: #f8fafc; border-style: dashed; }
+.ed-card.ed-deleted h2 { color: var(--ed-muted); text-decoration: line-through; }
+.ed-card.ed-deleted .ed-hint { margin: 0; }
+.ed-action-deleted { background: #f8fafc; border-style: dashed; }
+.ed-action-deleted .ed-num { background: #e5e7eb; color: var(--ed-muted); margin-top: 2px; }
+.ed-gone { flex: 1; min-width: 0; color: var(--ed-muted); text-decoration: line-through; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-hint.ed-inline { margin: 0; flex: none; }

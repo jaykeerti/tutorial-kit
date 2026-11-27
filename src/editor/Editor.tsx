@@ -9,8 +9,8 @@ import { stepLength, tutorialAt } from "../viewer/time";
 import type { Recording } from "../viewer/types";
 import "./Editor.css";
 
-type Action = { caption?: string; zoom?: boolean; speed?: number; action?: string; [k: string]: unknown };
-type Step = { title?: string; description?: string; zoom?: boolean; speed?: number; actions?: Action[]; [k: string]: unknown };
+type Action = { caption?: string; zoom?: boolean; speed?: number; deleted?: boolean; action?: string; [k: string]: unknown };
+type Step = { title?: string; description?: string; zoom?: boolean; speed?: number; deleted?: boolean; actions?: Action[]; [k: string]: unknown };
 type Settings = { zoom?: number | boolean; captions?: boolean; colors?: Record<string, string> };
 type Script = { title?: string; description?: string; category?: string; order?: number; url?: string; settings?: Settings; steps: Step[]; [k: string]: unknown };
 type Job = { id: string; running: boolean; ok: boolean; percent: number; log: string; phase?: string; step?: number; actions?: number; file?: string; size?: string };
@@ -199,8 +199,9 @@ export function Editor() {
         saveRef.current();
       }
     };
-    addEventListener("keydown", key);
-    return () => removeEventListener("keydown", key);
+    // Capture phase: the player keeps key presses to itself once you've clicked it.
+    addEventListener("keydown", key, true);
+    return () => removeEventListener("keydown", key, true);
   }, []);
   useEffect(() => {
     if (!dirty) return;
@@ -362,6 +363,8 @@ export function Editor() {
 
             {script.steps.map((st, i) => {
               const ps = preview.steps[i];
+              // The player leaves deleted steps out, so its step number can be lower than ours.
+              const inPlayer = script.steps.slice(0, i).filter((x) => !x.deleted).length;
               return (
                 <StepCard
                   key={i}
@@ -369,8 +372,9 @@ export function Editor() {
                   step={st}
                   seconds={ps ? stepLength(ps) / 1000 : 0}
                   zoomOn={script.settings?.zoom !== false}
+                  canDelete={script.steps.filter((x) => !x.deleted).length > 1}
                   change={change}
-                  onShow={(j) => (j === undefined || !ps?.captions?.[j] ? show(i, 0) : show(i, tutorialAt(ps, ps.captions[j].t) + 150))}
+                  onShow={(j) => (j === undefined || !ps?.captions?.[j] ? show(inPlayer, 0) : show(inPlayer, tutorialAt(ps, ps.captions[j].t) + 150))}
                 />
               );
             })}
@@ -383,9 +387,9 @@ export function Editor() {
   );
 }
 
-function Card({ title, hint, children, extra }: { title: string; hint?: string; children: React.ReactNode; extra?: React.ReactNode }) {
+function Card({ title, hint, children, extra, className = "" }: { title: string; hint?: string; children?: React.ReactNode; extra?: React.ReactNode; className?: string }) {
   return (
-    <section className="ed-card">
+    <section className={`ed-card ${className}`}>
       <div className="ed-card-head">
         <h2>{title}</h2>
         {extra}
@@ -485,10 +489,40 @@ function SpeedSelect({ value, inherited, onChange, label }: { value?: number; in
   );
 }
 
-function StepCard({ i, step, seconds, zoomOn, change, onShow }: { i: number; step: Step; seconds: number; zoomOn: boolean; change: (fn: (s: Script) => void) => void; onShow: (action?: number) => void }) {
+function StepCard({
+  i,
+  step,
+  seconds,
+  zoomOn,
+  canDelete,
+  change,
+  onShow,
+}: {
+  i: number;
+  step: Step;
+  seconds: number;
+  zoomOn: boolean;
+  canDelete: boolean;
+  change: (fn: (s: Script) => void) => void;
+  onShow: (action?: number) => void;
+}) {
   const edit = (fn: (st: Step) => void) => change((s) => fn(s.steps[i]));
   const stepZoom = step.zoom ?? zoomOn;
   const stepSpeed = step.speed ?? 1;
+  if (step.deleted)
+    return (
+      <Card
+        title={`Step ${i + 1}: ${step.title || "untitled"}`}
+        className="ed-deleted"
+        extra={
+          <button type="button" className="ed-btn ed-small" onClick={() => edit((st) => void delete st.deleted)}>
+            Restore step
+          </button>
+        }
+      >
+        <p className="ed-hint">Deleted: not in the player, the video or the help site.</p>
+      </Card>
+    );
   return (
     <Card
       title={`Step ${i + 1}`}
@@ -497,6 +531,15 @@ function StepCard({ i, step, seconds, zoomOn, change, onShow }: { i: number; ste
           {seconds.toFixed(1)} s
           <button type="button" className="ed-btn ed-small" onClick={() => onShow()}>
             ▶ Show
+          </button>
+          <button
+            type="button"
+            className="ed-btn ed-small ed-danger"
+            disabled={!canDelete}
+            title={canDelete ? "Leave this step out (you can restore it)" : "A tutorial needs at least one step"}
+            onClick={() => edit((st) => void (st.deleted = true))}
+          >
+            Delete step
           </button>
         </span>
       }
@@ -517,6 +560,20 @@ function StepCard({ i, step, seconds, zoomOn, change, onShow }: { i: number; ste
           // An action's speed lasts until the next action — so the default is the previous one's.
           let inheritedSpeed = stepSpeed;
           for (let k = 0; k < j; k++) if (step.actions?.[k]?.speed !== undefined) inheritedSpeed = step.actions[k].speed!;
+          if (a.deleted)
+            return (
+              <li key={j} className="ed-action ed-action-deleted">
+                <span className="ed-num">{j + 1}</span>
+                <div className="ed-action-body ed-action-top">
+                  {a.action && <span className="ed-tag">{String(a.action)}</span>}
+                  <span className="ed-gone">{a.caption || "(no caption)"}</span>
+                  <span className="ed-hint ed-inline">cut from the video</span>
+                  <button type="button" className="ed-btn ed-small" onClick={() => edit((st) => void delete st.actions![j].deleted)}>
+                    Restore
+                  </button>
+                </div>
+              </li>
+            );
           return (
             <li key={j} className="ed-action">
               <span className="ed-num">{j + 1}</span>
@@ -531,6 +588,15 @@ function StepCard({ i, step, seconds, zoomOn, change, onShow }: { i: number; ste
                   />
                   <button type="button" className="ed-btn ed-small" title="Show this moment in the player" onClick={() => onShow(j)}>
                     ▶
+                  </button>
+                  <button
+                    type="button"
+                    className="ed-btn ed-small ed-danger"
+                    aria-label={`Delete step ${i + 1}, action ${j + 1}`}
+                    title="Cut this action out of the video (you can restore it). What it changed on the page stays."
+                    onClick={() => edit((st) => void (st.actions![j].deleted = true))}
+                  >
+                    ✕
                   </button>
                 </div>
                 <div className="ed-row ed-row-tight">
@@ -662,7 +728,7 @@ function ImportPanel({ names, onClose, onImported }: { names: string[]; onClose:
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [over, setOver] = useState(false);
+  const [over, setOver] = useState<"recording" | "tutorial" | null>(null);
   const recording = picked.find((p) => p.kind === "recording");
   const tutorial = picked.find((p) => p.kind === "tutorial");
   const nameOk = NAME.test(name);
@@ -684,7 +750,7 @@ function ImportPanel({ names, onClose, onImported }: { names: string[]; onClose:
         const vp = data.viewport as { width: number; height: number } | undefined;
         const info =
           kind === "recording"
-            ? `Recording: ${steps} step${steps === 1 ? "" : "s"}, ${vp?.width}×${vp?.height}, ${(f.size / 1e6).toFixed(1)} MB`
+            ? `Recording: ${steps} step${steps === 1 ? "" : "s"}, ${vp?.width}×${vp?.height}, ${f.size < 1e6 ? `${Math.max(1, Math.round(f.size / 1e3))} KB` : `${(f.size / 1e6).toFixed(1)} MB`}`
             : `Tutorial file: “${String(data.title ?? "untitled")}”, ${steps} step${steps === 1 ? "" : "s"}`;
         const i = next.findIndex((p) => p.kind === kind);
         if (i >= 0) next.splice(i, 1);
@@ -725,37 +791,59 @@ function ImportPanel({ names, onClose, onImported }: { names: string[]; onClose:
         </button>
       </div>
       <p className="ed-hint">
-        Choose the recording (<code>public/recordings/&lt;name&gt;.json</code>, the big file) from another computer or a colleague, and its{" "}
-        <code>&lt;name&gt;.tutorial.json</code> if you have it. Without one, it's made from the recording.
+        From another computer or a colleague. The two files can be in different folders: choose each one in its own box.
       </p>
-      <label
-        className={over ? "ed-drop ed-over" : "ed-drop"}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setOver(false);
-          take(e.dataTransfer.files);
-        }}
-      >
-        <input type="file" accept=".json,application/json" multiple aria-label="Choose JSON files to import" onChange={(e) => take(e.target.files)} />
-        <span>Drop the .json files here, or click to choose</span>
-      </label>
-      {picked.length > 0 && (
-        <ul className="ed-picked">
-          {picked.map((p) => (
-            <li key={p.kind}>
-              <strong>{p.file}</strong>: {p.info}{" "}
-              <button type="button" className="ed-link" onClick={() => setPicked(picked.filter((x) => x !== p))}>
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="ed-slots">
+        {(
+          [
+            ["recording", "Recording", "<name>.json — the big file, from public/recordings/", "Choose the recording"],
+            ["tutorial", "Tutorial file (optional)", "<name>.tutorial.json, from tutorials/ — without it, one is made from the recording", "Choose the tutorial file"],
+          ] as const
+        ).map(([kind, title, where, label]) => {
+          const got = kind === "recording" ? recording : tutorial;
+          return (
+            <div key={kind} className="ed-slot">
+              <span className="ed-slot-title">{title}</span>
+              <label
+                className={`ed-drop${over === kind ? " ed-over" : ""}${got ? " ed-got" : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setOver(kind);
+                }}
+                onDragLeave={() => setOver(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setOver(null);
+                  take(e.dataTransfer.files);
+                }}
+              >
+                <input type="file" accept=".json,application/json" aria-label={label} onChange={(e) => {
+                  take(e.target.files);
+                  e.target.value = ""; // choosing the same file again still counts
+                }} />
+                {got ? (
+                  <span>
+                    ✓ <strong>{got.file}</strong>
+                    <br />
+                    <small>{got.info}</small>
+                  </span>
+                ) : (
+                  <span>
+                    Drop it here, or click to choose
+                    <br />
+                    <small>{where}</small>
+                  </span>
+                )}
+              </label>
+              {got && (
+                <button type="button" className="ed-link" onClick={() => setPicked(picked.filter((x) => x !== got))}>
+                  Remove
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
       {problems.map((p) => (
         <p key={p} className="ed-msg ed-bad">
           {p}
