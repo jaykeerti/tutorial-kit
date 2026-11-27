@@ -62,6 +62,30 @@ export function speedOf(v, where, warn) {
   return undefined;
 }
 
+/** Does this look like a recording (what the player plays)? */
+export const isRecording = (x) => !!x && typeof x === "object" && Array.isArray(x.events) && x.events.length > 0 && Array.isArray(x.steps) && x.steps.length > 0 && !!x.viewport;
+/** Does this look like a tutorial file (titles, captions, settings)? */
+export const isTutorialFile = (x) => !!x && typeof x === "object" && !Array.isArray(x.events) && Array.isArray(x.steps);
+
+/** A tutorial file made from a recording alone (for a recording imported without one). */
+export function scriptFromRecording(rec, name) {
+  const s = rec.settings ?? {};
+  const keep = (o) => ({ ...(o.zoom !== undefined ? { zoom: o.zoom } : {}), ...(o.speed !== undefined ? { speed: o.speed } : {}) });
+  return {
+    title: String(name).replace(/[-_]+/g, " ").trim().replace(/^./, (c) => c.toUpperCase()),
+    description: "",
+    category: "Guides",
+    ...(typeof rec.source === "string" && /^https?:/.test(rec.source) ? { url: rec.source } : {}),
+    settings: { ...DEFAULT_SETTINGS, ...s, colors: { ...DEFAULT_SETTINGS.colors, ...(s.colors ?? {}) } },
+    steps: rec.steps.map((st) => ({
+      title: st.title ?? "",
+      description: st.description ?? "",
+      ...keep(st),
+      actions: (st.captions ?? []).map((c) => ({ caption: c.text ?? "", ...keep(c) })),
+    })),
+  };
+}
+
 /**
  * Apply a tutorial file (script) to a recording. Returns a new recording; the original isn't changed
  * and the (large) events list is shared, not copied.

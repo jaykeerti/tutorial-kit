@@ -7,9 +7,10 @@ import react from "@vitejs/plugin-react";
 const tutorialFiles = (): Plugin => ({
   name: "tutorial-files",
   configureServer(server) {
-    server.middlewares.use(async (req, _res, next) => {
+    server.middlewares.use(async (req, res, next) => {
       const name = req.url?.match(/^\/recordings\/([^/?]+)\.json(\?|$)/)?.[1];
       const file = name && `${server.config.root}/tutorials/${decodeURIComponent(name)}.tutorial.json`;
+      const recording = name && `${server.config.root}/public/recordings/${decodeURIComponent(name)}.json`;
       if (file && fs.existsSync(file)) {
         try {
           // @ts-expect-error plain JS module
@@ -18,6 +19,14 @@ const tutorialFiles = (): Plugin => ({
         } catch (e) {
           console.warn(`[${name}] ${(e as Error).message}`);
         }
+      }
+      // Serve it ourselves: Vite notices files added to public/ only a moment later, so a recording
+      // that was just made or imported would otherwise come back as the app's page.
+      if (recording && !decodeURIComponent(name).includes("..") && fs.existsSync(recording)) {
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Cache-Control", "no-store");
+        fs.createReadStream(recording).pipe(res);
+        return;
       }
       next();
     });

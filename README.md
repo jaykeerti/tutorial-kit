@@ -139,6 +139,10 @@ npm run dev      →  http://localhost:5180/edit
   go to the first screen, then use the editor's buttons: **Start recording**, **Next step** before each new step,
   **Stop & save** when done (or **Start over**). Alt+R / Alt+N in the Chrome window still work. The new tutorial
   opens in the editor.
+- **⇪ Import**: drop in a recording (`public/recordings/<name>.json`) from another computer or a colleague, plus its
+  `<name>.tutorial.json` if you have it (otherwise one is made from the recording). It opens in the editor.
+- **Preview**: stays in view while you scroll the form. Its control bar has play/pause, a seek bar (click, drag, or
+  ←/→ for a second), the time and the speed.
 - **Tutorial / Look**: page title, description, help site group and position; zoom on/off and level, captions,
   colors (with color pickers).
 - **Each step and action**: title, description, caption text (empty = hidden), zoom on/off and speed. **▶** shows
@@ -237,8 +241,10 @@ npm run export -- crs-tutorial --mp4      # MP4 (H.264): plays everywhere, incl.
 | `--scale 0.75` | Smaller video (1 = the size of the window you recorded in) |
 | `--out <folder>` | Where to save (default `videos/`, which git ignores) |
 
-Your edits in the tutorial file are applied first. Rendering takes about a minute per minute of video. The first run
-downloads a headless Chrome for rendering (~100 MB, once).
+Your edits in the tutorial file are applied first. Rendering takes about a minute per minute of video. It uses your
+installed Google Chrome, so nothing is downloaded (this also works on company networks that block downloads). Only if
+Chrome isn't found does it download a headless Chrome (~100 MB, once). `TK_CHROME=/path/to/chrome` picks another
+browser; `TK_CHROME=download` always uses the downloaded one.
 
 Run `npm run docs` afterwards and the guide's help page gets a **Download the video** link, plus `<video>` embed code
 in *Embed this guide in another page*.

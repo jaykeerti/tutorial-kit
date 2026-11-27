@@ -71,7 +71,15 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, zoomPoints = t
   // Every frame: jump the replay to exactly this moment.
   useLayoutEffect(() => {
     const r = replayer.current;
+    // rrweb focuses the recorded fields (so typing looks real), and focusing anything inside the replay
+    // takes keyboard focus away from the page around it — you couldn't type in the editor or a search
+    // box while a tutorial plays. Hand focus straight back (the caret stays where it was).
+    // Only for a field you're typing in (not a button you just clicked), and never in video export,
+    // so the replayed page still shows its focused field and caret.
+    const had = document.activeElement as HTMLElement | null;
+    const typing = !rendering && !!had && (had.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(had.tagName)) && !host.current?.contains(had);
     r?.pause(t - t0);
+    if (typing && had !== document.activeElement && had!.isConnected) had!.focus({ preventScroll: true });
     if (!rendering || !r) return;
     // Video export: wait for the page's images and fonts before this frame is taken.
     const h = delayRender("rrweb frame");

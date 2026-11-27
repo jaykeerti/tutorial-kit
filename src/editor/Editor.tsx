@@ -3,7 +3,7 @@
 // Save writes the file (same as editing it by hand); Export, Help site and Record run our scripts
 // through the dev server (scripts/dev-api.mjs).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { applyScript, DEFAULT_SETTINGS } from "../../scripts/script-core.mjs";
+import { applyScript, DEFAULT_SETTINGS, isRecording, isTutorialFile } from "../../scripts/script-core.mjs";
 import { Tutorial } from "../viewer/Tutorial";
 import { stepLength, tutorialAt } from "../viewer/time";
 import type { Recording } from "../viewer/types";
@@ -109,6 +109,7 @@ export function Editor() {
   const [saving, setSaving] = useState(false);
   const [goto, setGoto] = useState<{ step: number; at: number; n: number }>();
   const [recordOpen, setRecordOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const dirty = script !== null && JSON.stringify(script) !== saved;
 
   const refreshList = () =>
@@ -216,11 +217,23 @@ export function Editor() {
     setName(n);
   };
 
+  // The preview sticks just below the top bar, whatever its height (it wraps on narrow windows).
+  const topRef = useRef<HTMLElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const top = topRef.current;
+    const root = rootRef.current;
+    if (!top || !root) return;
+    const ro = new ResizeObserver(() => root.style.setProperty("--ed-top", `${top.offsetHeight + 12}px`));
+    ro.observe(top);
+    return () => ro.disconnect();
+  }, []);
+
   const show = (step: number, at: number) => setGoto({ step, at: Math.max(0, Math.round(at)), n: Date.now() });
 
   return (
-    <div className="ed">
-      <header className="ed-top">
+    <div className="ed" ref={rootRef}>
+      <header className="ed-top" ref={topRef}>
         <strong className="ed-brand">Tutorial editor</strong>
         {list && list.length > 0 && (
           <label className="ed-pick">
@@ -241,6 +254,16 @@ export function Editor() {
               setRecordOpen(!recordOpen);
             }}>
             ● Record new
+          </button>
+          <button
+            type="button"
+            className={importOpen ? "ed-btn ed-on" : "ed-btn"}
+            onClick={() => {
+              if (!importOpen) scrollTo({ top: 0, behavior: "smooth" });
+              setImportOpen(!importOpen);
+            }}
+          >
+            ⇪ Import
           </button>
           {name && (
             <a className="ed-btn" href={`/?t=${encodeURIComponent(name)}`} target="_blank" rel="noreferrer">
@@ -268,6 +291,24 @@ export function Editor() {
             setScript(null);
             if (n === name) setName("");
             setTimeout(() => setName(n));
+          }}
+        />
+      )}
+      {importOpen && (
+        <ImportPanel
+          names={list?.map((t) => t.name) ?? []}
+          onClose={() => setImportOpen(false)}
+          onImported={(n, note) => {
+            if (dirty && n !== name && !confirm("You have unsaved changes. Open the imported tutorial and lose them?")) return;
+            refreshList();
+            setImportOpen(false);
+            setBase(null);
+            setScript(null);
+            if (n === name) setName("");
+            setTimeout(() => {
+              setName(n);
+              setTimeout(() => setNotice({ ok: true, text: note }), 400);
+            });
           }}
         />
       )}
@@ -603,6 +644,137 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
       {job && !job.running && !job.ok && <pre className="ed-log ed-bad">{tail(job.log) || "The export failed."}</pre>}
       {docs && !docs.running && (
         <pre className={docs.ok ? "ed-log" : "ed-log ed-bad"}>{docs.ok ? `${tail(docs.log, 4)}\nPreview the site: npm run help` : tail(docs.log)}</pre>
+      )}
+      {err && <p className="ed-msg ed-bad">{err}</p>}
+    </section>
+  );
+}
+
+type Picked = { file: string; kind: "recording" | "tutorial"; data: Record<string, unknown>; info: string };
+
+function ImportPanel({ names, onClose, onImported }: { names: string[]; onClose: () => void; onImported: (name: string, note: string) => void }) {
+  const [picked, setPicked] = useState<Picked[]>([]);
+  const [problems, setProblems] = useState<string[]>([]);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [over, setOver] = useState(false);
+  const recording = picked.find((p) => p.kind === "recording");
+  const tutorial = picked.find((p) => p.kind === "tutorial");
+  const nameOk = NAME.test(name);
+  const exists = names.includes(name);
+
+  const take = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const next = [...picked];
+    const bad: string[] = [];
+    for (const f of [...files]) {
+      try {
+        const data = JSON.parse(await f.text());
+        const kind = isRecording(data) ? "recording" : isTutorialFile(data) ? "tutorial" : null;
+        if (!kind) {
+          bad.push(`${f.name}: not a tutorial-kit recording or tutorial file`);
+          continue;
+        }
+        const steps = (data.steps as unknown[]).length;
+        const vp = data.viewport as { width: number; height: number } | undefined;
+        const info =
+          kind === "recording"
+            ? `Recording: ${steps} step${steps === 1 ? "" : "s"}, ${vp?.width}×${vp?.height}, ${(f.size / 1e6).toFixed(1)} MB`
+            : `Tutorial file: “${String(data.title ?? "untitled")}”, ${steps} step${steps === 1 ? "" : "s"}`;
+        const i = next.findIndex((p) => p.kind === kind);
+        if (i >= 0) next.splice(i, 1);
+        next.push({ file: f.name, kind, data, info });
+      } catch {
+        bad.push(`${f.name}: isn't valid JSON`);
+      }
+    }
+    setPicked(next);
+    setProblems(bad);
+    // Name from the file: create-ticket.json / create-ticket.tutorial.json → create-ticket
+    if (!name && next.length) setName(next[0].file.replace(/(\.tutorial)?\.json$/i, "").replace(/[^A-Za-z0-9_.-]+/g, "-"));
+  };
+
+  const go = async () => {
+    setErr("");
+    setBusy(true);
+    try {
+      const r = await api<{ warnings: string[]; madeTutorialFile: boolean }>(`import/${encodeURIComponent(name)}`, "POST", {
+        ...(recording ? { recording: recording.data } : {}),
+        ...(tutorial ? { tutorial: tutorial.data } : {}),
+      });
+      const note = `Imported “${name}”.${r.madeTutorialFile ? " Its tutorial file was made from the recording: edit it here and Save." : ""}${r.warnings.length ? ` Notes: ${r.warnings.join(" ")}` : ""}`;
+      onImported(name, note);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="ed-record" aria-label="Import a tutorial">
+      <div className="ed-card-head">
+        <h2>Import a tutorial</h2>
+        <button type="button" className="ed-link" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      <p className="ed-hint">
+        Choose the recording (<code>public/recordings/&lt;name&gt;.json</code>, the big file) from another computer or a colleague, and its{" "}
+        <code>&lt;name&gt;.tutorial.json</code> if you have it. Without one, it's made from the recording.
+      </p>
+      <label
+        className={over ? "ed-drop ed-over" : "ed-drop"}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          take(e.dataTransfer.files);
+        }}
+      >
+        <input type="file" accept=".json,application/json" multiple aria-label="Choose JSON files to import" onChange={(e) => take(e.target.files)} />
+        <span>Drop the .json files here, or click to choose</span>
+      </label>
+      {picked.length > 0 && (
+        <ul className="ed-picked">
+          {picked.map((p) => (
+            <li key={p.kind}>
+              <strong>{p.file}</strong>: {p.info}{" "}
+              <button type="button" className="ed-link" onClick={() => setPicked(picked.filter((x) => x !== p))}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {problems.map((p) => (
+        <p key={p} className="ed-msg ed-bad">
+          {p}
+        </p>
+      ))}
+      {picked.length > 0 && (
+        <>
+          <div className="ed-row">
+            <Field label="Tutorial name">
+              <input value={name} onChange={(e) => setName(e.target.value.trim())} />
+            </Field>
+          </div>
+          {name && !nameOk && <p className="ed-msg ed-bad">Use letters, numbers, - and _ in the name (no spaces).</p>}
+          {!recording && nameOk && !exists && <p className="ed-msg ed-bad">Choose the recording too: there's no tutorial called “{name}” here yet.</p>}
+          {nameOk && exists && (
+            <p className="ed-msg">
+              “{name}” exists. Importing replaces {recording ? (tutorial ? "its recording and tutorial file" : "its recording, and makes a new tutorial file") : "its tutorial file"}.
+            </p>
+          )}
+          <button type="button" className="ed-btn ed-primary" disabled={busy || !nameOk || (!recording && !exists)} onClick={go}>
+            {busy ? "Importing…" : exists ? "Import and replace" : "Import"}
+          </button>
+        </>
       )}
       {err && <p className="ed-msg ed-bad">{err}</p>}
     </section>

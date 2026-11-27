@@ -6,6 +6,7 @@
 //   POST /__tk/docs/<name>            add it to the help site (npm run docs), returns a job
 //   POST /__tk/record/<name>          record a new tutorial (npm run record), returns a job
 //   POST /__tk/command/<job id>       {"cmd": "start" | "next" | "stop"} for that recording
+//   POST /__tk/import/<name>          {"recording": …, "tutorial"?: …} add a recording made elsewhere
 //   GET  /__tk/job/<id>               how a job is going
 //   GET  /__tk/video/<file>           an exported video from videos/
 import fs from "node:fs";
@@ -13,7 +14,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { applyTutorialFile } from "./apply.mjs";
-import { DEFAULT_SETTINGS } from "./script-core.mjs";
+import { DEFAULT_SETTINGS, isRecording, isTutorialFile, scriptFromRecording } from "./script-core.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const NAME = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/; // a tutorial or file name — no folders
@@ -27,12 +28,12 @@ const send = (res, code, body) => {
   res.setHeader("Cache-Control", "no-store");
   res.end(JSON.stringify(body));
 };
-const readBody = (req) =>
+const readBody = (req, max = 5e6) =>
   new Promise((resolve, reject) => {
     let data = "";
     req.on("data", (d) => {
       data += d;
-      if (data.length > 5e6) reject(new Error("too large"));
+      if (data.length > max) reject(new Error("too large"));
     });
     req.on("end", () => {
       try {
@@ -117,6 +118,25 @@ export async function devApi(req, res, next) {
         if (fs.existsSync(onSite)) fs.copyFileSync(at("public", "recordings", `${name}.json`), onSite);
         return send(res, 200, { ok: true, warnings });
       }
+    }
+
+    if (what === "import" && req.method === "POST") {
+      // A recording (and maybe its tutorial file) from another computer or a colleague.
+      const { recording, tutorial } = await readBody(req, 500e6);
+      const recFile = at("public", "recordings", `${name}.json`);
+      const scriptFile = at("tutorials", `${name}.tutorial.json`);
+      if (recording !== undefined && !isRecording(recording)) return send(res, 400, { error: "That recording file isn't one tutorial-kit made (no steps or events in it)." });
+      if (tutorial !== undefined && !isTutorialFile(tutorial)) return send(res, 400, { error: "That tutorial file isn't one tutorial-kit made (no steps in it)." });
+      if (!recording && !fs.existsSync(recFile)) return send(res, 400, { error: `Choose the recording too — the big .json file (there's no recording called "${name}" here yet).` });
+      if (!recording && !tutorial) return send(res, 400, { error: "Choose a file to import." });
+      fs.mkdirSync(path.dirname(recFile), { recursive: true });
+      fs.mkdirSync(path.dirname(scriptFile), { recursive: true });
+      if (recording) fs.writeFileSync(recFile, JSON.stringify(recording));
+      const script = tutorial ?? scriptFromRecording(recording, name);
+      fs.writeFileSync(scriptFile, JSON.stringify(script, null, 2) + "\n");
+      const warnings = [];
+      applyTutorialFile(name, { log: () => {}, warn: (m) => warnings.push(m) });
+      return send(res, 200, { ok: true, warnings, madeTutorialFile: !tutorial });
     }
 
     if (what === "export" && req.method === "POST") {

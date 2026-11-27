@@ -2,6 +2,8 @@
 // End-to-end self-test: records the fixtures in src/components with a real mouse/keyboard,
 // checks what the recorder wrote, then runs capture on the result and checks the recording.
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
@@ -346,6 +348,15 @@ try {
       await v.locator(".tk-speed").click();
       await v.reload();
       check((await v.locator(".tk-speed").innerText({ timeout: 90000 })).trim() === "1.5×", "speed changes and is remembered");
+      // Seek bar: pause, click in the middle → about halfway through the step.
+      await v.locator(".tk-host iframe").waitFor({ timeout: 90000 });
+      await v.hover(".tk-player");
+      if ((await v.locator(".tk-ctl").first().getAttribute("aria-label")) === "Pause") await v.locator(".tk-ctl").first().click();
+      const sb = await v.locator(".tk-seek").boundingBox();
+      await v.mouse.click(sb.x + sb.width / 2, sb.y + sb.height / 2);
+      const now = Number(await v.locator(".tk-seek").getAttribute("aria-valuenow"));
+      const max = Number(await v.locator(".tk-seek").getAttribute("aria-valuemax"));
+      check(Math.abs(now - max / 2) <= 1, `seek bar jumps to where you click (${now} of ${max} s)`);
       // Zoom per step / per action: step 1 off, but on for its last action.
       const zoomed = () => v.evaluate(() => /scale\((?!1\))/.test(document.querySelector(".tk-host")?.parentElement?.style.transform ?? ""));
       const s0clicks = film.pointer.filter((q) => q.t >= s0.start && q.t <= s0.end).map((q) => Math.round(time.tutorialAt(s0, q.t)));
@@ -533,6 +544,19 @@ ${exp.out().slice(-600)}`}`);
 ${recLog}`}`);
         if (!opened) throw new Error("recording wasn't saved");
 
+        // Typing in the editor while the player plays: the replay mustn't take the keyboard focus.
+        const desc = e.getByLabel("Step 1 description");
+        await desc.click();
+        await desc.press("End");
+        await e.keyboard.type("abcdefghijklmnopqrst", { delay: 80 });
+        check((await desc.inputValue()).endsWith("abcdefghijklmnopqrst"), "typing in the editor while the player plays keeps every key");
+        // The preview stays in view while the form scrolls.
+        const top0 = (await e.locator(".tk-player").boundingBox()).y;
+        await e.mouse.move(1200, 600);
+        await e.mouse.wheel(0, 1200);
+        await e.waitForTimeout(400);
+        check((await e.evaluate(() => scrollY)) > 200 && Math.abs((await e.locator(".tk-player").boundingBox()).y - top0) < 40, "the preview stays in view while the form scrolls");
+        await e.evaluate(() => scrollTo(0, 0));
         await e.getByLabel("Step 1 title").fill("Add a bolt");
         await e.getByRole("button", { name: "Save", exact: true }).click();
         check(await until(() => JSON.parse(fs.readFileSync(`tutorials/${name}.tutorial.json`, "utf8")).steps[0].title === "Add a bolt", 10000), "Save writes the tutorial file");
@@ -545,6 +569,34 @@ ${recLog}`}`);
 ${await e.locator(".ed-log").innerText().catch(() => "")}`}`);
         await e.getByRole("button", { name: "Add to help site" }).click();
         check(await until(() => fs.existsSync(`help-site/docs/guides/${name}.mdx`), 60000), "Add to help site writes the page");
+
+        // Import: the recording alone (a tutorial file is made from it), then with its tutorial file.
+        const imp = "_edimp";
+        temp.push(`tutorials/${imp}.tutorial.json`, `public/recordings/${imp}.json`);
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tk-import-"));
+        fs.copyFileSync(`public/recordings/${name}.json`, path.join(dir, `${imp}.json`));
+        fs.copyFileSync(`tutorials/${name}.tutorial.json`, path.join(dir, `${imp}.tutorial.json`));
+        fs.writeFileSync(path.join(dir, "other.json"), JSON.stringify({ hello: 1 }));
+        await e.getByRole("button", { name: "⇪ Import" }).click();
+        const input = e.getByLabel("Choose JSON files to import");
+        await input.setInputFiles([path.join(dir, "other.json")]);
+        check(await e.getByText("not a tutorial-kit recording or tutorial file").waitFor({ timeout: 5000 }).then(() => true, () => false), "Import: a JSON that isn't ours is turned away");
+        await input.setInputFiles([path.join(dir, `${imp}.json`)]);
+        await e.getByRole("button", { name: "Import", exact: true }).click();
+        const madeOk = await until(() => e.url().includes(`t=${imp}`), 15000);
+        const madeScript = fs.existsSync(`tutorials/${imp}.tutorial.json`) ? JSON.parse(fs.readFileSync(`tutorials/${imp}.tutorial.json`, "utf8")) : null;
+        const shown = await e.getByLabel("Step 2 title").waitFor({ timeout: 15000 }).then(() => true, () => false);
+        if (!(madeOk && shown && madeScript?.steps?.[0]?.title === "Add a bolt")) console.log("   import details:", { madeOk, shown, titles: madeScript?.steps?.map((x) => x.title), messages: await e.locator(".ed-msg").allInnerTexts() });
+        check(madeOk && madeScript?.steps?.length === 2 && madeScript.steps[0].title === "Add a bolt" && shown, `Import: a recording alone gets a tutorial file and opens in the editor${madeOk ? "" : ` (address: ${e.url()})`}${madeScript ? "" : " (no tutorial file)"}`);
+        const withTitle = JSON.parse(fs.readFileSync(path.join(dir, `${imp}.tutorial.json`), "utf8"));
+        withTitle.title = "Imported with its file";
+        fs.writeFileSync(path.join(dir, `${imp}.tutorial.json`), JSON.stringify(withTitle));
+        await e.getByRole("button", { name: "⇪ Import" }).click();
+        await e.getByLabel("Choose JSON files to import").setInputFiles([path.join(dir, `${imp}.json`), path.join(dir, `${imp}.tutorial.json`)]);
+        // (names starting with _ aren't in the editor's list, so it may not say "and replace")
+        await e.getByRole("button", { name: /^Import( and replace)?$/ }).click();
+        check(await until(() => JSON.parse(fs.readFileSync(`tutorials/${imp}.tutorial.json`, "utf8")).title === "Imported with its file", 15000), "Import: recording + tutorial file, replacing an existing one");
+        fs.rmSync(dir, { recursive: true, force: true });
       }
     } finally {
       delete process.env.TK_TEST_CDP_PORT;

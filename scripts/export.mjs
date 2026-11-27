@@ -9,7 +9,10 @@
 //   --out <folder>   where to put the videos (default videos/)
 //
 // Your edits in tutorials/<name>.tutorial.json are applied first, like npm run titles.
-// The first run downloads a headless Chrome for rendering (~100 MB, once).
+// Rendering uses your Google Chrome (the one npm run record opens), so nothing is downloaded — that
+// also works on company networks that block downloads. No Chrome found? Then Remotion downloads its
+// own headless Chrome once (~100 MB). TK_CHROME=/path/to/chrome picks another browser;
+// TK_CHROME=download always uses Remotion's own.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,6 +23,30 @@ import { applyTutorialFile } from "./apply.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(ROOT);
+
+/** Your installed Google Chrome, or null. */
+function installedChrome() {
+  const env = process.env.TK_CHROME;
+  if (env === "download") return null;
+  if (env) {
+    if (fs.existsSync(env)) return env;
+    console.warn(`TK_CHROME=${env} doesn't exist — looking for Chrome instead.`);
+  }
+  const home = os.homedir();
+  const places = {
+    darwin: [
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      path.join(home, "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    ],
+    win32: [process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA].filter(Boolean).map((d) => path.join(d, "Google", "Chrome", "Application", "chrome.exe")),
+    linux: ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"],
+  }[process.platform] ?? [];
+  return places.find((p) => fs.existsSync(p)) ?? null;
+}
+const chrome = installedChrome();
+// A full Chrome renders in its current headless mode ("chrome-for-testing" in Remotion's terms).
+const browser = chrome ? { browserExecutable: chrome, chromeMode: "chrome-for-testing" } : {};
 
 const args = process.argv.slice(2);
 const flag = (f) => args.includes(f);
@@ -58,7 +85,7 @@ for (const name of names) {
 }
 
 // 2. Bundle the video composition once.
-console.log("Preparing the video renderer…");
+console.log(chrome ? `Preparing the video renderer (using ${chrome})…` : "Preparing the video renderer (no Google Chrome found — downloading a headless one, once)…");
 const serveUrl = await bundle({ entryPoint: path.join(ROOT, "src/video/index.ts"), publicDir: pub });
 
 // 3. Render each tutorial.
@@ -75,10 +102,11 @@ for (const { name, script } of jobs) {
   };
   const out = path.join(outDir, `${name}.${ext}`);
   try {
-    const composition = await selectComposition({ serveUrl, id: "tutorial", inputProps });
+    const composition = await selectComposition({ serveUrl, id: "tutorial", inputProps, ...browser });
     const secs = (composition.durationInFrames / composition.fps).toFixed(0);
     let last = -1;
     await renderMedia({
+      ...browser,
       composition,
       serveUrl,
       inputProps,

@@ -33,6 +33,16 @@
 .tk-ctl:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 .tk-time { font-variant-numeric: tabular-nums; opacity: .9; }
 .tk-speed { margin-left: auto; min-width: 40px; }
+/* seek bar along the top edge of the control bar: thin, thicker on hover; a tall invisible hit area */
+.tk-seek { position: absolute; left: 10px; right: 10px; top: -7px; height: 14px; cursor: pointer; touch-action: none; }
+.tk-seek::before, .tk-seek-fill { content: ""; position: absolute; left: 0; top: 50%; height: 3px; transform: translateY(-50%); border-radius: 3px; transition: height .15s; }
+.tk-seek::before { right: 0; background: rgba(255, 255, 255, .35); }
+.tk-seek-fill { background: var(--tk-accent, #7c3aed); }
+.tk-seek-fill::after { content: ""; position: absolute; right: -6px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .4); transform: translateY(-50%) scale(0); transition: transform .15s; }
+.tk-seek:hover::before, .tk-seek:hover .tk-seek-fill, .tk-seek:focus-visible::before, .tk-seek:focus-visible .tk-seek-fill { height: 5px; }
+.tk-seek:hover .tk-seek-fill::after, .tk-seek:focus-visible .tk-seek-fill::after, .tk-seek:active .tk-seek-fill::after { transform: translateY(-50%) scale(1); }
+.tk-seek:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 4px; }
+@media (hover: none) { .tk-seek-fill::after { transform: translateY(-50%) scale(1); } }
 .tk-loading, .tk-error { padding: 40px; text-align: center; color: #6b7280; }
 /* hide rrweb's built-in mouse; we draw our own */
 .tk-host .replayer-mouse, .tk-host .replayer-mouse-tail { display: none !important; }

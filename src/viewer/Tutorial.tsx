@@ -52,6 +52,7 @@ export function Tutorial({ src, recording, goto, zoom, captions, colors, layout 
   const [speed, setSpeed] = useState(savedSpeed);
   const playerRef = useRef<PlayerRef>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef<boolean | null>(null); // while dragging the seek bar: was it playing?
   const viewW = rec?.viewport.width;
 
   // The page is drawn scaled down to fit; when the control bar shows, lift the caption above it.
@@ -59,7 +60,7 @@ export function Tutorial({ src, recording, goto, zoom, captions, colors, layout 
   useEffect(() => {
     const el = boxRef.current;
     if (!el || !viewW) return;
-    const ro = new ResizeObserver(() => el.style.setProperty("--tk-lift", `${Math.round(44 / Math.max(0.05, el.clientWidth / viewW))}px`));
+    const ro = new ResizeObserver(() => el.style.setProperty("--tk-lift", `${Math.round(52 / Math.max(0.05, el.clientWidth / viewW))}px`));
     ro.observe(el);
     return () => ro.disconnect();
   }, [viewW]);
@@ -159,6 +160,24 @@ export function Tutorial({ src, recording, goto, zoom, captions, colors, layout 
       localStorage.setItem("tk-speed", String(n));
     } catch {}
   };
+  // Seek bar: click or drag anywhere in this step; arrow keys move 1 second.
+  const last = Math.max(1, frames(rec, active) - 1);
+  const seekTo = (fraction: number) => {
+    const frame = Math.round(Math.min(1, Math.max(0, fraction)) * last);
+    playerRef.current?.seekTo(frame);
+    setProgress(frame / last);
+  };
+  const seekAt = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    seekTo((e.clientX - r.left) / r.width);
+  };
+  const seekKey = (e: React.KeyboardEvent) => {
+    const step = FPS / last; // one second, as a fraction of the step
+    const to = { ArrowLeft: progress - step, ArrowRight: progress + step, Home: 0, End: 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    seekTo(to);
+  };
   const player = (
     <div ref={boxRef} className={playing ? "tk-player" : "tk-player tk-paused"}>
       <Player
@@ -178,6 +197,31 @@ export function Tutorial({ src, recording, goto, zoom, captions, colors, layout 
       />
       {/* thin see-through control bar: shows on hover, and stays while paused */}
       <div className="tk-controls">
+        <div
+          className="tk-seek"
+          role="slider"
+          tabIndex={0}
+          aria-label="Seek in this step"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(total)}
+          aria-valuenow={Math.round(progress * total)}
+          aria-valuetext={`${clock(progress * total)} of ${clock(total)}`}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            dragging.current = playerRef.current?.isPlaying() ?? false;
+            playerRef.current?.pause();
+            seekAt(e);
+          }}
+          onPointerMove={(e) => dragging.current !== null && seekAt(e)}
+          onPointerUp={() => {
+            if (dragging.current) playerRef.current?.play();
+            dragging.current = null;
+          }}
+          onPointerCancel={() => (dragging.current = null)}
+          onKeyDown={seekKey}
+        >
+          <span className="tk-seek-fill" style={{ width: `${Math.min(100, progress * 100)}%` }} />
+        </div>
         <button type="button" className="tk-ctl" aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause" : "Play"} onClick={() => playerRef.current?.toggle()}>
           {playing ? (
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" rx="1" fill="currentColor" /><rect x="9.5" y="2" width="3.5" height="12" rx="1" fill="currentColor" /></svg>
