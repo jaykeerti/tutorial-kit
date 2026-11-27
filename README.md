@@ -311,6 +311,12 @@ import TutorialPlayer from '@site/src/components/TutorialPlayer';
 *Embed this guide in another page* with the `<iframe>` code to copy. It points to `/embed?t=<name>` — just the
 player. Options in the address: `&zoom=0`, `&captions=0`, `&layout=side`.
 
+**Already have a Docusaurus site?** Use **Export for Docusaurus** in the editor (or `npm run docusaurus -- <name>`).
+It adds the guide to `exports/docusaurus/` (git ignores it), laid out like a Docusaurus site — `docs/<category>/<name>.mdx`,
+`static/recordings/`, `static/videos/` (if you exported a video) and the player in `src/`. Copy that folder's contents
+into the root of your site. `HOW-TO-ADD.md` in it has the one-time `npm install` (remotion, @remotion/player, rrweb) and
+how to use `<TutorialPlayer name="…" />` on your own pages. Export again and copy over the old files to update a guide.
+
 **Publish the site:** `npm run help:build` makes static files in `help-site/build/` — copy that folder to any web
 server (no Node needed there). Set `url` and `baseUrl` in `help-site/docusaurus.config.ts` first
 (`baseUrl: '/help/'` if it's served from a `/help/` folder). Try the build locally with `npm run help:serve`.
@@ -358,6 +364,7 @@ const Tutorial = React.lazy(() => import("./viewer/Tutorial").then((m) => ({ def
 | `npm run titles -- <name>` | Apply titles, captions and settings from `tutorials/<name>.tutorial.json` |
 | `npm run docs [-- <name>]` | Add/update guides in the help site |
 | `npm run help` | Preview the help site at `http://localhost:3000` |
+| `npm run docusaurus [-- <name>]` | A folder (`exports/docusaurus/`) to copy into your own Docusaurus site |
 | `npm run help:build` | Build the help site into `help-site/build/` for hosting |
 | `npm run export [-- <name>]` | Make a video: `videos/<name>.webm` (`--mp4` for MP4) |
 | `npm run capture -- <name> [--watch] [--safe]` | Optional robot replay — see [below](#optional-robot-replay-capture) |

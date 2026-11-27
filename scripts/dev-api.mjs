@@ -7,6 +7,7 @@
 //   POST /__tk/record/<name>          record a new tutorial (npm run record), returns a job
 //   POST /__tk/command/<job id>       {"cmd": "start" | "next" | "stop"} for that recording
 //   POST /__tk/import/<name>          {"recording": …, "tutorial"?: …} add a recording made elsewhere
+//   POST /__tk/docusaurus/<name>      add it to exports/docusaurus/ (to copy into your own Docusaurus site)
 //   GET  /__tk/files/<name>           the files that belong to a tutorial (shown before deleting)
 //   POST /__tk/delete/<name>          move them all into deleted/<name>-<date>/ (restorable)
 //   POST /__tk/restore/<folder>       move a deleted tutorial back
@@ -237,6 +238,16 @@ export async function devApi(req, res, next) {
       j.proc.stdin.write(`${cmd}
 `);
       return send(res, 200, { ok: true });
+    }
+
+    if (what === "docusaurus" && req.method === "POST") {
+      // Quick (just copies files), so no job: answer with where the folder is.
+      const { exportGuide } = await import("./docusaurus.mjs");
+      try {
+        return send(res, 200, exportGuide(name));
+      } catch (e) {
+        return send(res, 500, { error: e.message });
+      }
     }
 
     if (what === "docs" && req.method === "POST") return send(res, 200, { job: startJob("docs", [at("scripts", "docs.mjs"), name]).id });

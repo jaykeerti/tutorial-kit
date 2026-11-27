@@ -15,7 +15,8 @@
     "help:serve": "npm --prefix help-site run serve",
     "typecheck": "tsc --noEmit",
     "test:recorder": "node scripts/test-recorder.mjs",
-    "export": "node scripts/export.mjs"
+    "export": "node scripts/export.mjs",
+    "docusaurus": "node scripts/docusaurus.mjs"
   },
   "keywords": [],
   "author": "",

@@ -12,10 +12,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyTutorialFile } from "./apply.mjs";
+import { MARKER, pageFor, slug } from "./docs-page.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SITE = path.join(ROOT, "help-site");
-const MARKER = "tutorial_kit: generated";
 const VIEWER_FILES = ["Tutorial.tsx", "Tutorial.css", "RrwebClip.tsx", "motion.ts", "settings.ts", "time.ts", "types.ts"];
 
 /** Copy the player from src/viewer into the site (one source of truth; the copy is git-ignored). */
@@ -24,18 +24,11 @@ export function syncViewer() {
   fs.mkdirSync(to, { recursive: true });
   for (const f of VIEWER_FILES) {
     const body = fs.readFileSync(path.join(ROOT, "src", "viewer", f), "utf8");
-    fs.writeFileSync(path.join(to, f), `// Copied from tutorial-kit/src/viewer/${f} — edit it there, not here.\n${body}`);
+    const note = `Copied from tutorial-kit/src/viewer/${f} — edit it there, not here.`;
+    const head = f.endsWith(".css") ? `/* ${note} */` : `// ${note}`; // CSS has no // comments
+    fs.writeFileSync(path.join(to, f), `${head}\n${body}`);
   }
 }
-
-const slug = (s) =>
-  String(s)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "") || "guides";
-// Text that is safe inside MDX (no JSX / expressions).
-const mdx = (s) => String(s ?? "").replace(/[{}<>]/g, (c) => ({ "{": "&#123;", "}": "&#125;", "<": "&lt;", ">": "&gt;" })[c]);
-const yaml = (s) => JSON.stringify(String(s ?? ""));
 
 /** The tutorial's video from npm run export (videos/<name>.webm or .mp4), copied into the site. */
 function copyVideo(name) {
@@ -51,39 +44,6 @@ function copyVideo(name) {
     } else fs.rmSync(dest, { force: true }); // video was deleted: don't keep serving the old one
   }
   return found;
-}
-
-function pageFor(name, script, rec, video) {
-  const title = script.title || name;
-  const lines = [
-    "---",
-    `title: ${yaml(title)}`,
-    ...(script.description ? [`description: ${yaml(script.description)}`] : []),
-    ...(typeof script.order === "number" ? [`sidebar_position: ${script.order}`] : []),
-    `# Made by tutorial-kit (npm run docs). Remove the next line to edit this page by hand — it then won't be overwritten.`,
-    MARKER,
-    "---",
-    "",
-    "import TutorialPlayer from '@site/src/components/TutorialPlayer';",
-    "import EmbedSnippet from '@site/src/components/EmbedSnippet';",
-    ...(video ? ["import VideoDownload from '@site/src/components/VideoDownload';"] : []),
-    "",
-  ];
-  if (script.description) lines.push(mdx(script.description), "");
-  lines.push(`<TutorialPlayer name=${JSON.stringify(name)} />`, "");
-  if (video) lines.push(`<VideoDownload file=${JSON.stringify(video.file)} size=${JSON.stringify(video.size)} />`, "");
-  lines.push("## Steps", "");
-  rec.steps.filter((s) => !s.deleted).forEach((s, i) => {
-    lines.push(`### ${i + 1}. ${mdx(s.title)}`, "");
-    if (s.description) lines.push(mdx(s.description), "");
-    const caps = (s.captions ?? []).filter((c) => !c.deleted).map((c) => c.text).filter(Boolean);
-    if (caps.length) {
-      caps.forEach((c, j) => lines.push(`${j + 1}. ${mdx(c)}`));
-      lines.push("");
-    }
-  });
-  lines.push("---", "", "<details>", "<summary>Embed this guide in another page</summary>", "", `<EmbedSnippet name=${JSON.stringify(name)}${video ? ` video=${JSON.stringify(video.file)}` : ""} />`, "", "</details>", "");
-  return lines.join("\n");
 }
 
 function publish(name) {

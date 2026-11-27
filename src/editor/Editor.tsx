@@ -715,6 +715,7 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
   const [err, setErr] = useState("");
   const [job, setJob] = useJob();
   const [docs, setDocs] = useJob();
+  const [dsrs, setDsrs] = useState<{ folder: string; page: string; video: boolean; guides: number } | null>(null);
   const busy = !!job?.running;
 
   const run = async () => {
@@ -733,6 +734,18 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
     try {
       const { job: id } = await api<{ job: string }>(`docs/${encodeURIComponent(name)}`, "POST", {});
       setDocs({ id, running: true, ok: false, percent: 0, log: "" });
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+
+  // A folder to copy into your own Docusaurus site.
+  const forDocusaurus = async () => {
+    setErr("");
+    setDsrs(null);
+    if (dirty && !(await save())) return;
+    try {
+      setDsrs(await api(`docusaurus/${encodeURIComponent(name)}`, "POST", {}));
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -780,6 +793,9 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
         <button type="button" className="ed-btn" disabled={!!docs?.running} onClick={addToSite}>
           {docs?.running ? "Adding…" : "Add to help site"}
         </button>
+        <button type="button" className="ed-btn" title="Make a folder to copy into your own Docusaurus site" onClick={forDocusaurus}>
+          Export for Docusaurus
+        </button>
       </div>
       {busy && (
         <>
@@ -803,6 +819,15 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
       {job && !job.running && !job.ok && <pre className="ed-log ed-bad">{tail(job.log) || "The export failed."}</pre>}
       {docs && !docs.running && (
         <pre className={docs.ok ? "ed-log" : "ed-log ed-bad"}>{docs.ok ? `${tail(docs.log, 4)}\nPreview the site: npm run help` : tail(docs.log)}</pre>
+      )}
+      {dsrs && (
+        <div className="ed-msg ed-good" role="status">
+          <p>
+            Added to <code>{dsrs.folder}</code> ({dsrs.guides} guide{dsrs.guides === 1 ? "" : "s"} in it). Copy that folder's contents into the
+            root of your Docusaurus site — <code>HOW-TO-ADD.md</code> in it has the one-time setup.
+          </p>
+          {!dsrs.video && <p>No video included: Export video first if you want a download link on the page.</p>}
+        </div>
       )}
       {err && <p className="ed-msg ed-bad">{err}</p>}
     </section>

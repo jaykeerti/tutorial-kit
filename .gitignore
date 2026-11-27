@@ -16,5 +16,8 @@ help-site/.docusaurus/
 # videos from npm run export
 /videos/
 
+# folders made by npm run docusaurus / Export for Docusaurus (copy them into your site)
+/exports/
+
 # tutorials deleted in the editor (restorable; move the files back by hand, or use Undo)
 /deleted/

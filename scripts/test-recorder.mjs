@@ -513,6 +513,8 @@ ${exp.out().slice(-600)}`}`);
     };
     const guidesDirExisted = fs.existsSync("help-site/docs/guides");
     temp.push(`tutorials/${name}.tutorial.json`, `public/recordings/${name}.json`, `.auth/localhost_${port}.json`, `videos/${name}.webm`, `help-site/static/recordings/${name}.json`, `help-site/static/videos/${name}.webm`, `help-site/docs/guides/${name}.mdx`);
+    temp.push(`exports/docusaurus/docs/guides/${name}.mdx`, `exports/docusaurus/static/recordings/${name}.json`, `exports/docusaurus/static/videos/${name}.webm`);
+    const exportsExisted = fs.existsSync("exports");
     // The recording the editor starts runs headless, and we drive its Chrome over this port.
     process.env.TK_TEST_CDP_PORT = "9340";
     const server = await createServer({ server: { port, strictPort: true }, logLevel: "silent" });
@@ -621,6 +623,20 @@ ${recLog}`}`);
 ${await e.locator(".ed-log").innerText().catch(() => "")}`}`);
         await e.getByRole("button", { name: "Add to help site" }).click();
         check(await until(() => fs.existsSync(`help-site/docs/guides/${name}.mdx`), 60000), "Add to help site writes the page");
+        // Export for Docusaurus: a folder to copy into your own site.
+        await e.getByRole("button", { name: "Export for Docusaurus" }).click();
+        const dx = "exports/docusaurus";
+        const dxOk = await until(
+          () =>
+            fs.existsSync(`${dx}/docs/guides/${name}.mdx`) &&
+            fs.existsSync(`${dx}/static/recordings/${name}.json`) &&
+            fs.existsSync(`${dx}/src/components/TutorialPlayer/index.tsx`) &&
+            fs.readFileSync(`${dx}/src/tutorial-kit/Tutorial.css`, "utf8").startsWith("/*") &&
+            fs.readFileSync(`${dx}/HOW-TO-ADD.md`, "utf8").includes("npm install remotion@"),
+          15000,
+        );
+        const dxPage = dxOk ? fs.readFileSync(`${dx}/docs/guides/${name}.mdx`, "utf8") : "";
+        check(dxOk && dxPage.includes("<TutorialPlayer") && !dxPage.includes("EmbedSnippet") && (await e.getByText("HOW-TO-ADD.md").isVisible()), "Export for Docusaurus makes the folder (page, recording, player, how-to)");
 
         // Import: the recording alone (a tutorial file is made from it), then with its tutorial file.
         const imp = "_edimp";
@@ -660,6 +676,7 @@ ${await e.locator(".ed-log").innerText().catch(() => "")}`}`);
       await server.close();
       for (const f of temp) fs.rmSync(f, { force: true });
       if (!guidesDirExisted) fs.rmSync("help-site/docs/guides", { recursive: true, force: true });
+      if (!exportsExisted) fs.rmSync("exports", { recursive: true, force: true });
       await new Promise((resolve) => spawn(process.execPath, ["scripts/docs.mjs", "--rebuild-list"]).on("exit", resolve));
     }
   }
