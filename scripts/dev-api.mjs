@@ -200,7 +200,7 @@ export async function devApi(req, res, next) {
       if ([...jobs.values()].some((j) => j.kind === "export" && j.running)) return send(res, 409, { error: "A video is already being made — wait for it to finish." });
       const o = await readBody(req);
       const mp4 = o.format === "mp4";
-      const scale = [1, 0.75, 0.5].includes(Number(o.scale)) ? Number(o.scale) : 1;
+      const scale = [2, 1, 0.75, 0.5].includes(Number(o.scale)) ? Number(o.scale) : 1;
       const args = [at("scripts", "export.mjs"), name, ...(mp4 ? ["--mp4"] : []), ...(o.cards === false ? ["--no-cards"] : []), "--scale", String(scale)];
       if (o.zoom === false) args.push("--no-zoom");
       if (o.captions === false) args.push("--no-captions");

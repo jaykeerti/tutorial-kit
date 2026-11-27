@@ -753,6 +753,7 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
           </button>
         </div>
         <select aria-label="Size" value={scale} onChange={(e) => setScale(Number(e.target.value))}>
+          <option value={2}>Sharp (2×, for Retina screens; slower, bigger)</option>
           <option value={1}>Full size</option>
           <option value={0.75}>75% size</option>
           <option value={0.5}>50% size</option>

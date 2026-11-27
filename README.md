@@ -247,8 +247,12 @@ npm run export -- crs-tutorial --mp4      # MP4 (H.264): plays everywhere, incl.
 | `--no-cards` | No title cards, just the steps |
 | `--no-zoom`, `--no-captions` | Turn those off for this video (otherwise the tutorial file's settings are used) |
 | `--no-step-label` | No “Step 2 of 3 · title” label in the top-left corner (shown by default) |
-| `--scale 0.75` | Smaller video (1 = the size of the window you recorded in) |
+| `--scale 0.75` | Smaller video (1 = the size of the window you recorded in). `--scale 2` is sharp on Retina/HiDPI screens (4× the pixels: slower, bigger) |
 | `--out <folder>` | Where to save (default `videos/`, which git ignores) |
+
+Videos are made from lossless frames, as WebM (VP9) or MP4 (H.264), so thin borders and faint greys stay crisp —
+about 15–20 MB per minute at full size. For the sharpest result of all, use the live player (help site or `<iframe>`):
+it rebuilds the real page instead of showing pixels.
 
 Your edits in the tutorial file are applied first. Rendering takes about a minute per minute of video. It uses your
 installed Google Chrome, so nothing is downloaded (this also works on company networks that block downloads). Only if

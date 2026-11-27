@@ -112,7 +112,11 @@ for (const { name, script } of jobs) {
       composition,
       serveUrl,
       inputProps,
-      codec: mp4 ? "h264" : "vp8",
+      // Lossless frames (not JPEG) and VP9 rather than VP8: forms are mostly thin grey borders and faint
+      // backgrounds, which VP8 and JPEG wash out. Bigger files (~15–20 MB a minute at full size), much sharper.
+      codec: mp4 ? "h264" : "vp9",
+      imageFormat: "png",
+      crf: mp4 ? 16 : 20,
       outputLocation: out,
       scale,
       onProgress: ({ progress }) => {
