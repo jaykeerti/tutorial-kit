@@ -20,6 +20,7 @@
 import fs from "node:fs";
 import { DEFAULT_SETTINGS, authFileFor, checkSettings, openTarget, parseArgs, scriptSteps, settle, sizeFromArgs } from "./lib.mjs";
 import { attachSession, buildRecording } from "./session.mjs";
+import { DIRS, STUDIO, guardPrivateFolder, recordingFile, tutorialFile } from "./paths.mjs";
 
 const argv = process.argv.slice(2);
 const { url, component, name } = parseArgs(argv);
@@ -84,7 +85,8 @@ const { state } = session;
 if (url && !state.recording) console.warn("⚠ Alt+R was never pressed, so nothing was recorded.");
 if (url) {
   try {
-    fs.mkdirSync(".auth", { recursive: true });
+    guardPrivateFolder();
+    fs.mkdirSync(DIRS.auth, { recursive: true });
     await context.storageState({ path: auth });
     console.log(`Saved login to ${auth} (keep this file private).`);
   } catch {
@@ -93,7 +95,7 @@ if (url) {
 }
 
 // Recording the same tutorial again keeps your page details and settings (zoom, captions, colors).
-const scriptFile = `tutorials/${name}.tutorial.json`;
+const scriptFile = tutorialFile(name);
 let settings = DEFAULT_SETTINGS;
 // For the help site (npm run docs): page title, intro, sidebar group and position.
 let pageInfo = { title: name.replace(/[-_]+/g, " ").replace(/^./, (c) => c.toUpperCase()), description: "", category: "Guides" };
@@ -113,13 +115,13 @@ if (!built) {
 }
 
 // The recording the viewer plays…
-fs.mkdirSync("public/recordings", { recursive: true });
-const recFile = `public/recordings/${name}.json`;
+fs.mkdirSync(DIRS.recordings, { recursive: true });
+const recFile = recordingFile(name);
 fs.writeFileSync(recFile, built.json);
 
 // …and a small editable file: settings, step titles and captions (+ the actions, for the optional robot replay).
 const steps = state.steps();
-fs.mkdirSync("tutorials", { recursive: true });
+fs.mkdirSync(DIRS.tutorials, { recursive: true });
 fs.writeFileSync(scriptFile, JSON.stringify({ ...pageInfo, ...(url ? { url: state.startUrl ?? url, auth } : { component }), settings, steps: scriptSteps(steps) }, null, 2));
 
 const { info } = built;
@@ -128,6 +130,8 @@ console.log(
 );
 console.log(`   Size: ${info.viewport.width}×${info.viewport.height}`);
 if (info.resized) console.warn("   ⚠ The window was resized while recording; the tutorial uses the size from the start, so parts may be cut off or blank. Record again without resizing for the best result.");
-console.log(`   View it:      npm run dev  →  http://localhost:5180/?t=${name}`);
-console.log(`   Titles, captions, zoom, colors:  edit ${scriptFile}, then  npm run titles -- ${name}`);
-console.log(`   Add it to the help site:  npm run docs -- ${name}`);
+if (!STUDIO) {
+  console.log(`   View it:      npm run dev  →  http://localhost:5180/?t=${name}`);
+  console.log(`   Titles, captions, zoom, colors:  edit ${scriptFile}, then  npm run titles -- ${name}`);
+  console.log(`   Add it to the help site:  npm run docs -- ${name}`);
+}

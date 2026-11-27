@@ -17,13 +17,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { applyTutorialFile } from "./apply.mjs";
+import { DIRS, PROJECT, TOOL, recordingFile } from "./paths.mjs";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-process.chdir(ROOT);
+process.chdir(PROJECT);
 
 /** Your installed Google Chrome, or null. */
 function installedChrome() {
@@ -56,15 +55,15 @@ const valueArgs = new Set(["--scale", "--out"].map((f) => opt(f, null)).filter(B
 let names = args.filter((a) => !a.startsWith("--") && !valueArgs.has(a));
 if (!names.length) {
   names = fs
-    .readdirSync("tutorials")
+    .readdirSync(DIRS.tutorials)
     .filter((f) => f.endsWith(".tutorial.json") && !f.startsWith("_"))
     .map((f) => f.replace(/\.tutorial\.json$/, ""))
-    .filter((n) => fs.existsSync(`public/recordings/${n}.json`));
+    .filter((n) => fs.existsSync(recordingFile(n)));
 }
 const mp4 = flag("--mp4");
 const ext = mp4 ? "mp4" : "webm";
 const scale = Number(opt("--scale", "1"));
-const outDir = path.resolve(opt("--out", "videos"));
+const outDir = path.resolve(opt("--out", DIRS.videos));
 if (!(scale > 0 && scale <= 2)) throw new Error("--scale must be a number like 0.75");
 if (!names.length) {
   console.log("No recorded tutorials found. Record one first:  npm run record -- --url <page> <name>");
@@ -78,7 +77,7 @@ const jobs = [];
 for (const name of names) {
   try {
     const { script } = applyTutorialFile(name, { log: () => {}, warn: (m) => console.warn(`  ${m}`) });
-    fs.copyFileSync(`public/recordings/${name}.json`, path.join(pub, "recordings", `${name}.json`));
+    fs.copyFileSync(recordingFile(name), path.join(pub, "recordings", `${name}.json`));
     jobs.push({ name, script });
   } catch (e) {
     console.error(`  ✗ ${name}: ${e.message}`);
@@ -87,7 +86,7 @@ for (const name of names) {
 
 // 2. Bundle the video composition once.
 console.log(chrome ? `Preparing the video renderer (using ${chrome})…` : "Preparing the video renderer (no Google Chrome found — downloading a headless one, once)…");
-const serveUrl = await bundle({ entryPoint: path.join(ROOT, "src/video/index.ts"), publicDir: pub });
+const serveUrl = await bundle({ entryPoint: path.join(TOOL, "src/video/index.ts"), publicDir: pub });
 
 // 3. Render each tutorial.
 fs.mkdirSync(outDir, { recursive: true });
@@ -126,7 +125,7 @@ for (const { name, script } of jobs) {
       },
     });
     const mb = (fs.statSync(out).size / 1e6).toFixed(1);
-    console.log(`\r  ${name}: ${path.relative(ROOT, out)}  (${secs} s, ${mb} MB)          `);
+    console.log(`\r  ${name}: ${path.relative(PROJECT, out)}  (${secs} s, ${mb} MB)          `);
   } catch (e) {
     failed++;
     console.error(`\n  ✗ ${name}: ${e.message}`);

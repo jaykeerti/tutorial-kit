@@ -16,6 +16,11 @@ help-site/.docusaurus/
 # videos from npm run export
 /videos/
 
+# build output and packages of packages/ (npm run plugin:build, plugin:pack, studio:build, studio:pack)
+packages/*/lib/
+packages/*/dist/
+packages/*/*.tgz
+
 # folders made by npm run docusaurus / Export for Docusaurus (copy them into your site)
 /exports/
 

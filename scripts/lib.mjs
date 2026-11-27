@@ -1,7 +1,8 @@
 // Shared helpers for record.mjs, capture.mjs and the tests.
+import { createRequire } from "node:module";
+import { DIRS } from "./paths.mjs";
 import fs from "node:fs";
 import path from "node:path";
-import { createServer } from "vite";
 import { chromium } from "playwright-core";
 
 export const VIEWPORT = { width: 1280, height: 720 };
@@ -26,7 +27,7 @@ export function parseArgs(argv) {
 const slug = (s) => s.replace(/^\/+|\/+$/g, "").replace(/[^a-z0-9]+/gi, "-").toLowerCase() || null;
 
 /** Where the saved login (cookies + localStorage) for a URL lives. Never commit this folder. */
-export const authFileFor = (url) => path.join(".auth", `${new URL(url).host.replace(/[^a-z0-9.-]/gi, "_")}.json`);
+export const authFileFor = (url) => path.join(DIRS.auth, `${new URL(url).host.replace(/[^a-z0-9.-]/gi, "_")}.json`);
 
 /**
  * Open a browser on either:
@@ -50,6 +51,7 @@ export async function openTarget({ url, component, auth, headless, port, slowMo 
   let server = null;
   let pageUrl = url;
   if (!url) {
+    const { createServer } = await import("vite"); // only for a dropped-in component (not inside a docs site)
     server = await createServer({ server: { port, strictPort: true }, logLevel: "warn" });
     await server.listen();
     pageUrl = `http://localhost:${port}/harness.html?c=${component}`;
@@ -98,7 +100,8 @@ export async function settle(page, url) {
  * Elements with data-private are always masked; data-tk-block are left out entirely.
  */
 export async function injectRecorder(page, onEvent, options = {}) {
-  const rrweb = fs.readFileSync(path.join("node_modules", "rrweb", "dist", "rrweb.umd.min.cjs"), "utf8");
+  // Found through Node's resolution, so it works wherever rrweb is installed (here, or in a docs site's node_modules).
+  const rrweb = fs.readFileSync(path.join(path.dirname(createRequire(import.meta.url).resolve("rrweb")), "rrweb.umd.min.cjs"), "utf8");
   const config = {
     maskTextSelector: ["[data-private]", ...(options.mask || [])].join(", "),
     blockSelector: "[data-tk-block]",

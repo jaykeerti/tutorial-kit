@@ -1,4 +1,5 @@
-// The tutorial editor: npm run dev → http://localhost:5180/edit
+// The tutorial editor: npm run dev → http://localhost:5180/edit — or, inside a Docusaurus site with
+// docusaurus-plugin-tutorial-kit's studio, npm start → http://localhost:5190/edit (files go into the site).
 // Everything in tutorials/<name>.tutorial.json as a form, with the player showing each change live.
 // Save writes the file (same as editing it by hand); Export, Help site and Record run our scripts
 // through the dev server (scripts/dev-api.mjs).
@@ -13,7 +14,7 @@ type Action = { caption?: string; zoom?: boolean; speed?: number; deleted?: bool
 type Step = { title?: string; description?: string; zoom?: boolean; speed?: number; deleted?: boolean; actions?: Action[]; [k: string]: unknown };
 type Settings = { zoom?: number | boolean; captions?: boolean; colors?: Record<string, string> };
 type Script = { title?: string; description?: string; category?: string; order?: number; url?: string; settings?: Settings; steps: Step[]; [k: string]: unknown };
-type Job = { id: string; running: boolean; ok: boolean; percent: number; log: string; phase?: string; step?: number; actions?: number; file?: string; size?: string };
+type Job = { id: string; running: boolean; ok: boolean; percent: number; log: string; phase?: string; step?: number; actions?: number; file?: string; size?: string; path?: string; page?: string; kept?: boolean; pageError?: string };
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 const COLORS: [string, string][] = [
@@ -24,6 +25,17 @@ const COLORS: [string, string][] = [
   ["captionText", "Caption text"],
 ];
 const NAME = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
+
+/** Where files go: standalone (this repo) or inside a Docusaurus site (studio). */
+type Config = { studio: boolean; docs: string | null; recordings: string; videos: string; tutorials: string };
+let config: Config = { studio: false, docs: null, recordings: "public/recordings", videos: "videos", tutorials: "tutorials" };
+const configReady = fetch("/__tk/config")
+  .then((r) => (r.ok ? r.json() : null))
+  .then((c) => c && (config = c))
+  .catch(() => {});
+/** "Saved …" text, naming the page in the docs site when there is one. */
+const pageNote = (r: { page?: string; kept?: boolean; pageError?: string }) =>
+  r.pageError ? ` Couldn't update the page: ${r.pageError}` : r.page ? (r.kept ? ` Your page ${r.page} was left as it is (you edited it).` : ` Page: ${r.page}`) : "";
 
 async function api<T = Record<string, unknown>>(path: string, method = "GET", body?: unknown): Promise<T> {
   const r = await fetch(`/__tk/${path}`, body === undefined ? { method } : { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -115,7 +127,8 @@ export function Editor() {
   const dirty = script !== null && JSON.stringify(script) !== saved;
 
   const refreshList = () =>
-    api<{ name: string; title: string }[]>("tutorials")
+    configReady
+      .then(() => api<{ name: string; title: string }[]>("tutorials"))
       .then(setList)
       .catch((e) => setError(e.message));
   useEffect(() => {
@@ -136,7 +149,7 @@ export function Editor() {
     setDeleting(null);
     Promise.all([
       api<{ script: Script }>(`tutorial/${encodeURIComponent(name)}`),
-      fetch(`/recordings/${encodeURIComponent(name)}.json?${Date.now()}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`No recording for ${name}`)))),
+      fetch(`/__tk/recording/${encodeURIComponent(name)}?${Date.now()}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`No recording for ${name}`)))),
     ])
       .then(([{ script: raw }, rec]) => {
         if (gone) return;
@@ -180,9 +193,9 @@ export function Editor() {
     if (!script) return false;
     setSaving(true);
     try {
-      const r = await api<{ warnings: string[] }>(`tutorial/${encodeURIComponent(name)}`, "PUT", script);
+      const r = await api<{ warnings: string[]; file?: string; page?: string; kept?: boolean; pageError?: string }>(`tutorial/${encodeURIComponent(name)}`, "PUT", script);
       setSaved(JSON.stringify(script));
-      setNotice({ ok: true, text: r.warnings.length ? `Saved. Notes: ${r.warnings.join(" ")}` : `Saved tutorials/${name}.tutorial.json` });
+      setNotice({ ok: !r.pageError, text: (r.warnings.length ? `Saved. Notes: ${r.warnings.join(" ")}` : `Saved ${r.file ?? `tutorials/${name}.tutorial.json`}.`) + pageNote(r) });
       refreshList();
       return true;
     } catch (e) {
@@ -341,7 +354,8 @@ export function Editor() {
           names={list?.map((t) => t.name) ?? []}
           url={typeof script?.url === "string" ? script.url : ""}
           onClose={() => setRecordOpen(false)}
-          onSaved={(n) => {
+          onSaved={(n, j) => {
+            if (j.page || j.pageError) nextNotice.current = { ok: !j.pageError, text: `Recorded “${n}”.${pageNote(j)}` };
             refreshList();
             setRecordOpen(false);
             setBase(null);
@@ -419,7 +433,7 @@ export function Editor() {
           </aside>
 
           <section className="ed-form">
-            <Card title="Tutorial" hint="The help site page and the video's title card.">
+            <Card title="Tutorial" hint={config.studio ? "The guide's page in your docs and the video's title card." : "The help site page and the video's title card."}>
               <Field label="Title">
                 <input value={script.title ?? ""} onChange={(e) => change((s) => void (s.title = e.target.value))} />
               </Field>
@@ -427,7 +441,7 @@ export function Editor() {
                 <textarea rows={2} value={script.description ?? ""} onChange={(e) => change((s) => void (s.description = e.target.value))} />
               </Field>
               <div className="ed-row">
-                <Field label="Help site group">
+                <Field label="Sidebar group">
                   <input value={script.category ?? ""} placeholder="Guides" onChange={(e) => change((s) => void (s.category = e.target.value))} />
                 </Field>
                 <Field label="Position in group">
@@ -754,7 +768,7 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
   return (
     <section className="ed-card ed-export">
       <div className="ed-card-head">
-        <h2>Video &amp; help site</h2>
+        <h2>{config.studio ? "Video" : <>Video &amp; help site</>}</h2>
       </div>
       <div className="ed-row ed-row-tight">
         <div className="ed-seg" role="group" aria-label="Format">
@@ -790,12 +804,17 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
         <button type="button" className="ed-btn ed-primary" disabled={busy} onClick={run}>
           {busy ? `Making video… ${job?.percent ?? 0}%` : "Export video"}
         </button>
-        <button type="button" className="ed-btn" disabled={!!docs?.running} onClick={addToSite}>
-          {docs?.running ? "Adding…" : "Add to help site"}
-        </button>
-        <button type="button" className="ed-btn" title="Make a folder to copy into your own Docusaurus site" onClick={forDocusaurus}>
-          Export for Docusaurus
-        </button>
+        {/* Inside a Docusaurus site the page is kept up to date on every save, so these aren't needed. */}
+        {!config.studio && (
+          <>
+            <button type="button" className="ed-btn" disabled={!!docs?.running} onClick={addToSite}>
+              {docs?.running ? "Adding…" : "Add to help site"}
+            </button>
+            <button type="button" className="ed-btn" title="Make a folder to copy into your own Docusaurus site" onClick={forDocusaurus}>
+              Export for Docusaurus
+            </button>
+          </>
+        )}
       </div>
       {busy && (
         <>
@@ -809,7 +828,7 @@ function ExportPanel({ name, dirty, save }: { name: string; dirty: boolean; save
         <div className="ed-done">
           <video src={`/__tk/video/${job.file}?${job.id}`} controls playsInline preload="metadata" />
           <p>
-            Saved <code>videos/{job.file}</code> ({job.size}) —{" "}
+            Saved <code>{job.path ?? `videos/${job.file}`}</code> ({job.size}){job.page && !job.kept ? <> — the page <code>{job.page}</code> now has a download link</> : null} —{" "}
             <a href={`/__tk/video/${job.file}?download`} download>
               download
             </a>
@@ -883,11 +902,11 @@ function ImportPanel({ names, onClose, onImported }: { names: string[]; onClose:
     setErr("");
     setBusy(true);
     try {
-      const r = await api<{ warnings: string[]; madeTutorialFile: boolean }>(`import/${encodeURIComponent(name)}`, "POST", {
+      const r = await api<{ warnings: string[]; madeTutorialFile: boolean; page?: string; kept?: boolean; pageError?: string }>(`import/${encodeURIComponent(name)}`, "POST", {
         ...(recording ? { recording: recording.data } : {}),
         ...(tutorial ? { tutorial: tutorial.data } : {}),
       });
-      const note = `Imported “${name}”.${r.madeTutorialFile ? " Its tutorial file was made from the recording: edit it here and Save." : ""}${r.warnings.length ? ` Notes: ${r.warnings.join(" ")}` : ""}`;
+      const note = `Imported “${name}”.${r.madeTutorialFile ? " Its tutorial file was made from the recording: edit it here and Save." : ""}${r.warnings.length ? ` Notes: ${r.warnings.join(" ")}` : ""}${pageNote(r)}`;
       onImported(name, note);
     } catch (e) {
       setErr((e as Error).message);
@@ -910,8 +929,8 @@ function ImportPanel({ names, onClose, onImported }: { names: string[]; onClose:
       <div className="ed-slots">
         {(
           [
-            ["recording", "Recording", "<name>.json — the big file, from public/recordings/", "Choose the recording"],
-            ["tutorial", "Tutorial file (optional)", "<name>.tutorial.json, from tutorials/ — without it, one is made from the recording", "Choose the tutorial file"],
+            ["recording", "Recording", `<name>.json — the big file, from ${config.recordings.replace(/\\/g, "/")}/`, "Choose the recording"],
+            ["tutorial", "Tutorial file (optional)", `<name>.tutorial.json, from ${config.tutorials}/ — without it, one is made from the recording`, "Choose the tutorial file"],
           ] as const
         ).map(([kind, title, where, label]) => {
           const got = kind === "recording" ? recording : tutorial;
@@ -987,13 +1006,13 @@ function ImportPanel({ names, onClose, onImported }: { names: string[]; onClose:
   );
 }
 
-function RecordPanel({ names, url: initialUrl, onClose, onSaved }: { names: string[]; url: string; onClose: () => void; onSaved: (name: string) => void }) {
+function RecordPanel({ names, url: initialUrl, onClose, onSaved }: { names: string[]; url: string; onClose: () => void; onSaved: (name: string, job: Job) => void }) {
   const [url, setUrl] = useState(initialUrl);
   const [name, setName] = useState("");
   const [size, setSize] = useState("");
   const [mask, setMask] = useState(false);
   const [err, setErr] = useState("");
-  const [job, setJob] = useJob((j) => j.ok && onSaved(name));
+  const [job, setJob] = useJob((j) => j.ok && onSaved(name, j));
   const live = !!job?.running;
   const nameOk = NAME.test(name);
 

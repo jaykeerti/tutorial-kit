@@ -1,17 +1,14 @@
 // Apply what you edited in tutorials/<name>.tutorial.json — step titles, descriptions, captions and
 // settings — to public/recordings/<name>.json. Used by `npm run titles` and `npm run docs`.
 import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { inProject, recordingFile, tutorialFile } from "./paths.mjs";
 import { applyScript } from "./script-core.mjs";
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Returns { script, rec } after updating the recording on disk. Throws with a readable message. */
 export function applyTutorialFile(name, { log = console.log, warn = console.warn } = {}) {
-  const scriptFile = `tutorials/${name}.tutorial.json`;
-  const recFile = `public/recordings/${name}.json`;
-  const abs = (f) => path.join(ROOT, f);
+  const scriptFile = tutorialFile(name);
+  const recFile = recordingFile(name);
+  const abs = (f) => inProject(f);
   for (const f of [scriptFile, recFile]) {
     if (!fs.existsSync(abs(f))) throw new Error(`Missing ${f}. Record it first:  npm run record -- …`);
   }

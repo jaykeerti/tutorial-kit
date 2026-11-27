@@ -16,8 +16,10 @@ const yaml = (s) => JSON.stringify(String(s ?? ""));
  * @param video  { file: "videos/<name>.webm", size: "1.2 MB" } or null
  * @param opts.embed  add the "Embed this guide in another page" section (our help site only)
  * @param opts.by     who made the page, for the comment in the front matter
+ * @param opts.components  where the page imports the player from: "@site/src/components" (our help site)
+ *                         or "@theme" (works with docusaurus-plugin-tutorial-kit, or a copy in src/theme/)
  */
-export function pageFor(name, script, rec, video, { embed = true, by = "npm run docs" } = {}) {
+export function pageFor(name, script, rec, video, { embed = true, by = "npm run docs", components = "@site/src/components" } = {}) {
   const title = script.title || name;
   const lines = [
     "---",
@@ -28,9 +30,9 @@ export function pageFor(name, script, rec, video, { embed = true, by = "npm run 
     MARKER,
     "---",
     "",
-    "import TutorialPlayer from '@site/src/components/TutorialPlayer';",
+    `import TutorialPlayer from '${components}/TutorialPlayer';`,
     ...(embed ? ["import EmbedSnippet from '@site/src/components/EmbedSnippet';"] : []),
-    ...(video ? ["import VideoDownload from '@site/src/components/VideoDownload';"] : []),
+    ...(video ? [`import VideoDownload from '${components}/VideoDownload';`] : []),
     "",
   ];
   if (script.description) lines.push(mdx(script.description), "");

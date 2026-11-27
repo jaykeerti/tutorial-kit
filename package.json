@@ -16,7 +16,11 @@
     "typecheck": "tsc --noEmit",
     "test:recorder": "node scripts/test-recorder.mjs",
     "export": "node scripts/export.mjs",
-    "docusaurus": "node scripts/docusaurus.mjs"
+    "docusaurus": "node scripts/docusaurus.mjs",
+    "plugin:build": "node scripts/plugin-build.mjs",
+    "plugin:pack": "node scripts/plugin-build.mjs --pack",
+    "studio:build": "node scripts/studio-build.mjs",
+    "studio:pack": "node scripts/studio-build.mjs --pack"
   },
   "keywords": [],
   "author": "",

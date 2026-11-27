@@ -26,6 +26,7 @@ like the "how it works" sections on product sites — without screen recording a
 - [Step titles and captions](#step-titles-and-captions)
 - [Video export (WebM / MP4)](#video-export-webm--mp4)
 - [Help site (Docusaurus)](#help-site-docusaurus)
+- [Docusaurus plugin (your own docs site)](#docusaurus-plugin-your-own-docs-site)
 - [Show the tutorial in your React app](#show-the-tutorial-in-your-react-app)
 - [Commands](#commands)
 - [Real data, privacy & safety](#real-data-privacy--safety)
@@ -325,6 +326,123 @@ Name, logo and brand color: `title` in `docusaurus.config.ts`, `help-site/static
 
 ---
 
+## Docusaurus plugin (your own docs site)
+
+`packages/docusaurus-plugin-tutorial-kit` puts the player into any Docusaurus 3 site, so pages just say
+`<TutorialPlayer name="…" />` — no copied code, no imports.
+
+```bash
+npm run plugin:pack        # → packages/docusaurus-plugin-tutorial-kit/docusaurus-plugin-tutorial-kit-<version>.tgz
+```
+
+In your docs site: `npm install <that .tgz>` (or from your registry once published), then add
+`plugins: ['docusaurus-plugin-tutorial-kit']` to `docusaurus.config`. Put recordings in `static/recordings/`
+(**Export for Docusaurus** does this: with the plugin, copy only its `docs/` and `static/`). See the package's README.
+
+There are two ways to make guides for your docs site:
+
+- **Studio (recommended)** — record and edit **inside your docs site**: `npm start` there also opens the editor, and
+  everything is saved straight into the site. Nothing to copy. See *Studio* below.
+- **Copy** — record here in tutorial-kit, then copy the files over. See *From recording to a page on your docs site*.
+
+### Studio: record and edit inside your docs site
+
+One-time setup in the docs site (each person who makes guides does the install; the config is shared via git):
+
+```bash
+npm run plugin:pack && npm run studio:pack   # here, in tutorial-kit → two .tgz files in packages/…
+```
+
+```bash
+# in your docs site
+npm install <path>/docusaurus-plugin-tutorial-kit-0.1.0.tgz
+npm install -D <path>/tutorial-kit-studio-0.1.0.tgz      # recorder, editor, video export — dev only
+```
+
+```js
+// docusaurus.config.js
+plugins: [['docusaurus-plugin-tutorial-kit', {studio: true}]],
+```
+
+(Once both are on your registry: `npm install docusaurus-plugin-tutorial-kit` and `npm install -D tutorial-kit-studio`.)
+Google Chrome must be installed (recording uses it).
+
+Then, every time:
+
+1. `npm start` in the docs site. Besides the site, it prints
+   `[tutorial-kit] tutorial-kit studio: http://localhost:5190/edit` — open that.
+2. **● Record new** → page address + name → **Open Chrome** → log in if needed → **Start recording** → do the task,
+   **Next step** between steps → **■ Stop & save**. The guide's page appears in the docs site right away.
+3. Edit titles, captions, zoom… → **Save**. The page updates (the site reloads by itself).
+4. **Export video** (optional) — the page gets a download link.
+5. Commit the new files with the rest of your docs, as usual.
+
+Where things are saved, all inside the docs site:
+
+| What | Where |
+|---|---|
+| the page | `docs/<sidebar group>/<name>.mdx` (group "Guides" if none) |
+| the recording | `static/recordings/<name>.json` |
+| the editable settings, titles, captions | `tutorials/<name>.tutorial.json` |
+| the video | `static/videos/<name>.webm` |
+| logins (private) and deleted guides | `.tutorial-kit/` — it has its own `.gitignore`, so it's never committed |
+
+- **Your own words on the page:** remove the page's `tutorial_kit: generated` line. From then on the studio never
+  changes that page (move it anywhere under `docs/`), but Save still updates the recording it plays.
+- **Another sidebar group:** change *Sidebar group* and Save — the page moves to that folder.
+- **The guide on other pages:** `<TutorialPlayer name="<name>" />` in any `.md`/`.mdx`. Link to the page like any doc.
+- **Delete tutorial** moves its files (and the page, unless you edited it) into `.tutorial-kit/deleted/`; **Undo** restores.
+- Options: `studio: {port: 5191}` (another port), `{docs: 'guides'}` (a docs folder other than `docs/`),
+  `{tutorials: 'guides-src'}` (where the `.tutorial.json` files go).
+- **Safe:** the studio runs only during `npm start` (never in `npm run build`, so nothing of it is published), listens
+  only on your computer, and refuses requests from other web pages.
+
+### From recording to a page on your docs site (copy)
+
+Without the studio, recording and editing happen **here, in tutorial-kit**, and your docs site only shows the result.
+For every new guide:
+
+1. **Record** — in tutorial-kit: `npm run dev`, open `http://localhost:5180/edit`, click **● Record new**. Enter the
+   page address and a name (e.g. `create-ticket`), **Open Chrome**, log in if needed, then **Start recording**, do the
+   task, **Next step** between steps, **■ Stop & save**. (Or `npm run record -- --url <address> create-ticket`.)
+2. **Edit** — still in the editor: step titles and descriptions, captions, zoom, speed, delete what you don't want.
+   **Save** (Ctrl+S / ⌘S).
+3. **Video (optional)** — **Export video** if you also want a download link on the page.
+4. **Export** — **Export for Docusaurus**. It writes into `exports/docusaurus/` in tutorial-kit:
+   - `docs/<category>/create-ticket.mdx` — a ready-made page: the player, the video link, the steps as text
+   - `static/recordings/create-ticket.json` — the recording (and `static/videos/create-ticket.webm` if you made one)
+5. **Copy** `exports/docusaurus/docs` and `exports/docusaurus/static` into the root of your docs site (merge with the
+   folders there). With the plugin you don't need its `src/` folder.
+6. **Check** — `npm start` in your docs site. The new page is in the sidebar under its category (the tutorial's
+   `category` setting; "Guides" if none). Commit and deploy your docs site as usual.
+
+**Putting a guide on a page of your own** instead of (or as well as) the ready-made page: copy only
+`static/recordings/create-ticket.json`, then in any `.md`/`.mdx` page write
+
+```mdx
+<TutorialPlayer name="create-ticket" />
+```
+
+The `name` is the recording's file name without `.json`. The same guide can be on as many pages as you like.
+
+**Linking to it** from other pages: a normal docs link to the ready-made page, e.g. `[Create a ticket](/guides/create-ticket)`
+(the path is `docs/` folder + file name, without `.mdx`; moving the file moves the link).
+
+**Changing a guide later:** open it in the editor, change and **Save**, **Export for Docusaurus** again, copy over the
+old files. (Want to keep your own text on the ready-made page? Remove its `tutorial_kit: generated` line — but then
+copying a newer export over it replaces your edits, so copy just the recording.)
+
+**Re-recording:** record again with the **same name** — it replaces the recording. The guide's title, description,
+category and look (zoom, captions, colours) are kept; step titles and captions start fresh, so redo those in the
+editor. Then export and copy as above.
+
+**Publishing to an internal registry (e.g. Artifactory):** set `publishConfig.registry` in
+`packages/docusaurus-plugin-tutorial-kit/package.json` to your npm registry URL, raise `version`, run
+`npm run plugin:build`, then `npm publish` in that folder (after `npm login --registry <url>`). Same for the studio:
+`packages/tutorial-kit-studio/package.json`, `npm run studio:build`, `npm publish` there. Only their built files and
+README are published — never recordings, tutorial files or logins. Others then install them like any package
+(with your registry set in their `.npmrc`).
+
 ## Show the tutorial in your React app
 
 The viewer is one component: `src/viewer/Tutorial.tsx`.
@@ -364,6 +482,8 @@ const Tutorial = React.lazy(() => import("./viewer/Tutorial").then((m) => ({ def
 | `npm run titles -- <name>` | Apply titles, captions and settings from `tutorials/<name>.tutorial.json` |
 | `npm run docs [-- <name>]` | Add/update guides in the help site |
 | `npm run help` | Preview the help site at `http://localhost:3000` |
+| `npm run plugin:pack` | Build the Docusaurus plugin and make its `.tgz` (`plugin:build` = build only) |
+| `npm run studio:pack` | Build tutorial-kit-studio (record and edit inside a Docusaurus site) and make its `.tgz` (`studio:build` = build only) |
 | `npm run docusaurus [-- <name>]` | A folder (`exports/docusaurus/`) to copy into your own Docusaurus site |
 | `npm run help:build` | Build the help site into `help-site/build/` for hosting |
 | `npm run export [-- <name>]` | Make a video: `videos/<name>.webm` (`--mp4` for MP4) |

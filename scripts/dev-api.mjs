@@ -1,4 +1,8 @@
-// The editor page's helpers, served by `npm run dev` under /__tk/ (your computer only, never deployed):
+// The editor page's helpers, served by `npm run dev` under /__tk/ (your computer only, never deployed) —
+// or, inside a Docusaurus site, by docusaurus-plugin-tutorial-kit while you run `npm start` (studio).
+// Where files go: scripts/paths.mjs.
+//   GET  /__tk/config                 { studio, docs, … }: standalone, or inside a Docusaurus site
+//   GET  /__tk/recording/<name>       the recording, with the tutorial file applied (for the preview)
 //   GET  /__tk/tutorials              your recorded tutorials
 //   GET  /__tk/tutorial/<name>        its tutorial file
 //   PUT  /__tk/tutorial/<name>        save the tutorial file (and apply it, like npm run titles)
@@ -16,13 +20,23 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { applyTutorialFile } from "./apply.mjs";
+import { DIRS, PROJECT, STUDIO, TOOL, guardPrivateFolder, inProject, recordingFile, rel, tutorialFile } from "./paths.mjs";
 import { DEFAULT_SETTINGS, isRecording, isTutorialFile, scriptFromRecording } from "./script-core.mjs";
+import { pagesOf, writeGuidePage } from "./site-page.mjs";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const NAME = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/; // a tutorial or file name — no folders
-const at = (...p) => path.join(ROOT, ...p);
+const at = (...p) => inProject(...p);
+const script = (f) => path.join(TOOL, "scripts", f);
+/** Studio: keep the guide's page in docs/ up to date. Returns its path, or a note if that failed. */
+const updatePage = (name) => {
+  if (!STUDIO) return {};
+  try {
+    return writeGuidePage(name);
+  } catch (e) {
+    return { pageError: e.message };
+  }
+};
 const jobs = new Map();
 let nextJob = 1;
 
@@ -50,16 +64,16 @@ const readBody = (req, max = 5e6) =>
   });
 
 function list() {
-  if (!fs.existsSync(at("tutorials"))) return [];
+  if (!fs.existsSync(at(DIRS.tutorials))) return [];
   return fs
-    .readdirSync(at("tutorials"))
+    .readdirSync(at(DIRS.tutorials))
     .filter((f) => f.endsWith(".tutorial.json") && !f.startsWith("_"))
     .map((f) => f.replace(/\.tutorial\.json$/, ""))
-    .filter((n) => fs.existsSync(at("public", "recordings", `${n}.json`)))
+    .filter((n) => fs.existsSync(at(recordingFile(n))))
     .map((name) => {
       let title = name;
       try {
-        title = JSON.parse(fs.readFileSync(at("tutorials", `${name}.tutorial.json`), "utf8")).title || name;
+        title = JSON.parse(fs.readFileSync(at(tutorialFile(name)), "utf8")).title || name;
       } catch {}
       return { name, title };
     })
@@ -68,6 +82,18 @@ function list() {
 
 /** Every file that belongs to a tutorial (paths relative to the project). */
 function filesOf(name) {
+  if (STUDIO) {
+    // In a docs site: its files, the video, and the page if tutorial-kit wrote it (a page you edited stays).
+    const slash = (f) => f.split(path.sep).join("/");
+    const out = [tutorialFile(name), recordingFile(name), ...["webm", "mp4"].map((e) => path.join(DIRS.videos, `${name}.${e}`))].map(slash);
+    for (const p of pagesOf(name).filter((p) => fs.readFileSync(p, "utf8").includes("tutorial_kit: generated"))) {
+      out.push(rel(p));
+      // The last page in its category: take the category too, so no empty section is left in the sidebar.
+      const rest = fs.readdirSync(path.dirname(p)).filter((f) => f !== path.basename(p));
+      if (rest.length === 1 && rest[0] === "_category_.json") out.push(rel(path.join(path.dirname(p), "_category_.json")));
+    }
+    return out.filter((f) => fs.existsSync(at(f)));
+  }
   const out = [`tutorials/${name}.tutorial.json`, `public/recordings/${name}.json`];
   for (const ext of ["webm", "mp4"]) out.push(`videos/${name}.${ext}`, `help-site/static/videos/${name}.${ext}`);
   out.push(`help-site/static/recordings/${name}.json`);
@@ -87,8 +113,9 @@ const moveFile = (from, to) => {
 };
 // The help site's home page lists the guides: refresh it after a page goes or comes back.
 const rebuildGuideList = () => {
+  if (STUDIO) return; // our own help site only
   try {
-    execFileSync(process.execPath, [at("scripts", "docs.mjs"), "--rebuild-list"], { cwd: ROOT, stdio: "ignore" });
+    execFileSync(process.execPath, [script("docs.mjs"), "--rebuild-list"], { cwd: PROJECT, stdio: "ignore" });
   } catch {}
 };
 
@@ -97,7 +124,7 @@ function startJob(kind, args) {
   const id = String(nextJob++);
   const job = { id, kind, running: true, ok: false, percent: 0, log: "", phase: "starting", step: 1, actions: 0 };
   jobs.set(id, job);
-  const p = spawn(process.execPath, args, { cwd: ROOT, env: process.env });
+  const p = spawn(process.execPath, args, { cwd: PROJECT, env: process.env });
   job.proc = p;
   const take = (d) => {
     const text = String(d);
@@ -131,11 +158,26 @@ export async function devApi(req, res, next) {
   const name = raw ? decodeURIComponent(raw) : "";
   if (raw && !NAME.test(name)) return send(res, 400, { error: "Bad name" });
   try {
+    if (what === "config" && req.method === "GET") return send(res, 200, { studio: STUDIO, docs: DIRS.docs, recordings: DIRS.recordings, videos: DIRS.videos, tutorials: DIRS.tutorials });
+
+    if (what === "recording" && req.method === "GET") {
+      // For the editor's preview: the recording with the tutorial file applied.
+      const file = at(recordingFile(name));
+      if (!fs.existsSync(file)) return send(res, 404, { error: `No recording called "${name}"` });
+      if (fs.existsSync(at(tutorialFile(name))))
+        try {
+          applyTutorialFile(name, { log: () => {}, warn: () => {} });
+        } catch {}
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-store");
+      return fs.createReadStream(file).pipe(res);
+    }
+
     if (what === "tutorials" && req.method === "GET") return send(res, 200, list());
 
     if (what === "tutorial") {
-      const file = at("tutorials", `${name}.tutorial.json`);
-      if (!fs.existsSync(file)) return send(res, 404, { error: `No tutorials/${name}.tutorial.json` });
+      const file = at(tutorialFile(name));
+      if (!fs.existsSync(file)) return send(res, 404, { error: `No ${rel(file)}` });
       if (req.method === "GET") return send(res, 200, { script: JSON.parse(fs.readFileSync(file, "utf8")), defaults: DEFAULT_SETTINGS });
       if (req.method === "PUT") {
         const script = await readBody(req);
@@ -145,16 +187,16 @@ export async function devApi(req, res, next) {
         applyTutorialFile(name, { log: () => {}, warn: (m) => warnings.push(m) });
         // Already on the help site? Keep its copy in step (as npm run titles does).
         const onSite = at("help-site", "static", "recordings", `${name}.json`);
-        if (fs.existsSync(onSite)) fs.copyFileSync(at("public", "recordings", `${name}.json`), onSite);
-        return send(res, 200, { ok: true, warnings });
+        if (!STUDIO && fs.existsSync(onSite)) fs.copyFileSync(at(recordingFile(name)), onSite);
+        return send(res, 200, { ok: true, warnings, file: rel(file), ...updatePage(name) });
       }
     }
 
     if (what === "import" && req.method === "POST") {
       // A recording (and maybe its tutorial file) from another computer or a colleague.
       const { recording, tutorial } = await readBody(req, 500e6);
-      const recFile = at("public", "recordings", `${name}.json`);
-      const scriptFile = at("tutorials", `${name}.tutorial.json`);
+      const recFile = at(recordingFile(name));
+      const scriptFile = at(tutorialFile(name));
       if (recording !== undefined && !isRecording(recording)) return send(res, 400, { error: "That recording file isn't one tutorial-kit made (no steps or events in it)." });
       if (tutorial !== undefined && !isTutorialFile(tutorial)) return send(res, 400, { error: "That tutorial file isn't one tutorial-kit made (no steps in it)." });
       if (!recording && !fs.existsSync(recFile)) return send(res, 400, { error: `Choose the recording too — the big .json file (there's no recording called "${name}" here yet).` });
@@ -166,7 +208,7 @@ export async function devApi(req, res, next) {
       fs.writeFileSync(scriptFile, JSON.stringify(script, null, 2) + "\n");
       const warnings = [];
       applyTutorialFile(name, { log: () => {}, warn: (m) => warnings.push(m) });
-      return send(res, 200, { ok: true, warnings, madeTutorialFile: !tutorial });
+      return send(res, 200, { ok: true, warnings, madeTutorialFile: !tutorial, ...updatePage(name) });
     }
 
     if (what === "files" && req.method === "GET") return send(res, 200, { files: filesOf(name) });
@@ -179,14 +221,21 @@ export async function devApi(req, res, next) {
       const d = new Date();
       const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
       const folder = `${name}-${stamp}`;
-      for (const f of files) moveFile(at(f), at("deleted", folder, f));
-      fs.writeFileSync(at("deleted", folder, "deleted.json"), JSON.stringify({ name, deleted: d.toISOString(), files }, null, 2) + "\n");
+      guardPrivateFolder();
+      for (const f of files) moveFile(at(f), at(DIRS.deleted, folder, f));
+      // Studio: a category folder left empty goes too (restoring makes it again).
+      if (STUDIO)
+        for (const f of files) {
+          const dir = path.dirname(at(f));
+          if (dir !== at(DIRS.docs) && dir.startsWith(at(DIRS.docs)) && fs.existsSync(dir) && !fs.readdirSync(dir).length) fs.rmdirSync(dir);
+        }
+      fs.writeFileSync(at(DIRS.deleted, folder, "deleted.json"), JSON.stringify({ name, deleted: d.toISOString(), files }, null, 2) + "\n");
       rebuildGuideList();
-      return send(res, 200, { ok: true, folder: `deleted/${folder}`, files });
+      return send(res, 200, { ok: true, folder: `${DIRS.deleted}/${folder}`, files });
     }
 
     if (what === "restore" && req.method === "POST") {
-      const dir = at("deleted", name);
+      const dir = at(DIRS.deleted, name);
       const info = fs.existsSync(path.join(dir, "deleted.json")) ? JSON.parse(fs.readFileSync(path.join(dir, "deleted.json"), "utf8")) : null;
       if (!info) return send(res, 404, { error: "Nothing to restore there." });
       const clash = info.files.filter((f) => fs.existsSync(at(f)));
@@ -202,16 +251,18 @@ export async function devApi(req, res, next) {
       const o = await readBody(req);
       const mp4 = o.format === "mp4";
       const scale = [2, 1, 0.75, 0.5].includes(Number(o.scale)) ? Number(o.scale) : 1;
-      const args = [at("scripts", "export.mjs"), name, ...(mp4 ? ["--mp4"] : []), ...(o.cards === false ? ["--no-cards"] : []), "--scale", String(scale)];
+      const args = [script("export.mjs"), name, ...(mp4 ? ["--mp4"] : []), ...(o.cards === false ? ["--no-cards"] : []), "--scale", String(scale)];
       if (o.zoom === false) args.push("--no-zoom");
       if (o.captions === false) args.push("--no-captions");
       if (o.stepLabel === false) args.push("--no-step-label");
       const job = startJob("export", args);
       job.done = (j) => {
         const file = `${name}.${mp4 ? "mp4" : "webm"}`;
-        if (j.ok && fs.existsSync(at("videos", file))) {
+        if (j.ok && fs.existsSync(at(DIRS.videos, file))) {
           j.file = file;
-          j.size = `${(fs.statSync(at("videos", file)).size / 1e6).toFixed(1)} MB`;
+          j.path = `${DIRS.videos}/${file}`;
+          j.size = `${(fs.statSync(at(DIRS.videos, file)).size / 1e6).toFixed(1)} MB`;
+          Object.assign(j, updatePage(name)); // studio: the page gets its download link
         }
       };
       return send(res, 200, { job: job.id });
@@ -221,12 +272,15 @@ export async function devApi(req, res, next) {
       if ([...jobs.values()].some((j) => j.kind === "record" && j.running)) return send(res, 409, { error: "A recording is already open — stop it first." });
       const o = await readBody(req);
       if (!/^https?:\/\/\S+$/.test(o.url ?? "")) return send(res, 400, { error: "Enter the page address, starting with http:// or https://" });
-      const args = [at("scripts", "record.mjs"), "--url", o.url, name];
+      const args = [script("record.mjs"), "--url", o.url, name];
       if (o.size === "full") args.push("--fullscreen");
       else if (/^\d{3,5}x\d{3,5}$/.test(o.size ?? "")) args.push("--size", o.size);
       if (o.maskInputs) args.push("--mask-inputs");
       const job = startJob("record", args);
       job.name = name;
+      job.done = (j) => {
+        if (j.ok && fs.existsSync(at(recordingFile(name)))) Object.assign(j, updatePage(name)); // studio: the page appears in docs/
+      };
       return send(res, 200, { job: job.id });
     }
 
@@ -240,6 +294,8 @@ export async function devApi(req, res, next) {
       return send(res, 200, { ok: true });
     }
 
+    if ((what === "docusaurus" || what === "docs") && STUDIO) return send(res, 404, { error: "Not needed inside a Docusaurus site: saving updates the page." });
+
     if (what === "docusaurus" && req.method === "POST") {
       // Quick (just copies files), so no job: answer with where the folder is.
       const { exportGuide } = await import("./docusaurus.mjs");
@@ -250,7 +306,7 @@ export async function devApi(req, res, next) {
       }
     }
 
-    if (what === "docs" && req.method === "POST") return send(res, 200, { job: startJob("docs", [at("scripts", "docs.mjs"), name]).id });
+    if (what === "docs" && req.method === "POST") return send(res, 200, { job: startJob("docs", [script("docs.mjs"), name]).id });
 
     if (what === "job" && req.method === "GET") {
       const j = jobs.get(name);
@@ -260,7 +316,7 @@ export async function devApi(req, res, next) {
     }
 
     if (what === "video" && req.method === "GET") {
-      const file = at("videos", name);
+      const file = at(DIRS.videos, name);
       if (!/\.(webm|mp4)$/.test(name) || !fs.existsSync(file)) return send(res, 404, { error: "No such video" });
       res.setHeader("Content-Type", name.endsWith(".mp4") ? "video/mp4" : "video/webm");
       res.setHeader("Content-Length", String(fs.statSync(file).size));

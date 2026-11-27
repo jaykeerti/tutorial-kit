@@ -1,0 +1,38 @@
+{
+  "name": "tutorial-kit-studio",
+  "version": "0.1.0",
+  "description": "Record and edit tutorial-kit guides from inside your Docusaurus site (used by docusaurus-plugin-tutorial-kit's studio option, during npm start only).",
+  "type": "module",
+  "main": "dist/scripts/studio-server.mjs",
+  "exports": {
+    ".": "./dist/scripts/studio-server.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "keywords": [
+    "docusaurus",
+    "tutorial",
+    "rrweb"
+  ],
+  "license": "UNLICENSED",
+  "publishConfig": {
+    "registry": "REPLACE-WITH-YOUR-ARTIFACTORY-NPM-URL"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.546",
+    "@remotion/renderer": "4.0.546",
+    "playwright-core": "1.65.1",
+    "remotion": "4.0.546",
+    "rrweb": "2.2.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

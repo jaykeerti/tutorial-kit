@@ -6,8 +6,9 @@
 //     docs/<category>/<name>.mdx          the guide page: live player, video link, steps as text
 //     static/recordings/<name>.json       what the player plays
 //     static/videos/<name>.webm           the video, if you exported one
-//     src/components/TutorialPlayer/      <TutorialPlayer name="…" /> for pages
-//     src/components/VideoDownload/       "Download the video" link
+//     src/theme/TutorialPlayer/           <TutorialPlayer name="…" /> for pages (@theme/TutorialPlayer)
+//     src/theme/VideoDownload/            "Download the video" link
+// With docusaurus-plugin-tutorial-kit installed, only docs/ and static/ are needed.
 //     src/tutorial-kit/                   the player itself (always the latest, overwrite the old copy)
 // Exporting more guides adds them to the same folder. Copy everything into the root of your site.
 import fs from "node:fs";
@@ -82,7 +83,7 @@ export default function VideoDownload({file, size}: {file: string; size?: string
 }
 `;
 
-const DOCS_CSS = `/* Made by tutorial-kit: how the player sits in a docs page (light and dark theme). */
+export const DOCS_CSS = `/* Made by tutorial-kit: how the player sits in a docs page (light and dark theme). */
 .tk-doc-player { margin: 1.5rem 0 2rem; }
 .tk-doc-placeholder { aspect-ratio: 16 / 9; border-radius: 16px; background: var(--ifm-color-emphasis-100); display: grid; place-items: center; color: var(--ifm-color-emphasis-600); }
 .tk-doc-player .tk-step { color: var(--ifm-font-color-base); }
@@ -98,32 +99,35 @@ const howTo = (guides) => `# Adding these guides to your Docusaurus site
 Made by tutorial-kit. Guides in this folder:
 ${guides.map((g) => `- **${g.title}** → \`${g.page}\``).join("\n")}
 
-## Once: install the player's packages
+## Using docusaurus-plugin-tutorial-kit? (easiest)
 
-In your Docusaurus site's folder:
+If your site has the plugin (\`plugins: ['docusaurus-plugin-tutorial-kit']\` in docusaurus.config), copy only
+\`docs/\` and \`static/\` into the root of your site — skip \`src/\`. Done.
+
+## Without the plugin
+
+**Once**, in your Docusaurus site's folder:
 
 \`\`\`bash
 npm install remotion@${version("remotion")} @remotion/player@${version("@remotion/player")} rrweb@${version("rrweb")}
 \`\`\`
 
-(Docusaurus 3, React 18 or 19.)
+(Docusaurus 3, React 18 or 19.) **Each time**, copy everything in this folder (\`docs/\`, \`static/\`, \`src/\`) into the
+**root** of your site, merging with the folders already there and replacing files with the same name.
 
-## Each time: copy this folder into your site
-
-Copy everything in this folder (\`docs/\`, \`static/\`, \`src/\`) into the **root** of your Docusaurus site, merging
-with the folders already there and replacing files with the same name. Leave out this HOW-TO-ADD.md.
+## What's in here
 
 - \`docs/<category>/<name>.mdx\` — the guide's page. Move it wherever you like in your docs; the sidebar picks it up.
 - \`static/recordings/\`, \`static/videos/\` — what the page plays and links to. Keep these paths.
-- \`src/components/TutorialPlayer\`, \`src/components/VideoDownload\`, \`src/tutorial-kit/\` — the player. Replace the
-  old copy each time, so you get fixes.
+- \`src/theme/TutorialPlayer\`, \`src/theme/VideoDownload\`, \`src/tutorial-kit/\` — the player (not needed with the
+  plugin). Replace the old copy each time, so you get fixes.
 
-Then \`npm start\` (or build) your site as usual.
+Then \`npm start\` (or build) your site as usual. Leave out this HOW-TO-ADD.md.
 
 ## Using the player on your own pages
 
 \`\`\`mdx
-import TutorialPlayer from '@site/src/components/TutorialPlayer';
+import TutorialPlayer from '@theme/TutorialPlayer';
 
 <TutorialPlayer name="${guides[0]?.name ?? "my-guide"}" />
 \`\`\`
@@ -147,8 +151,10 @@ export function exportGuide(name, out = DEFAULT_OUT) {
     write(path.join(out, "src", "tutorial-kit", f), `${head}\n${fs.readFileSync(path.join(ROOT, "src", "viewer", f), "utf8")}`);
   }
   write(path.join(out, "src", "tutorial-kit", "docs.css"), DOCS_CSS);
-  write(path.join(out, "src", "components", "TutorialPlayer", "index.tsx"), PLAYER);
-  write(path.join(out, "src", "components", "VideoDownload", "index.tsx"), VIDEO);
+  // src/theme/: pages import @theme/TutorialPlayer, which is this copy — or the plugin's, if the site has it.
+  write(path.join(out, "src", "theme", "TutorialPlayer", "index.tsx"), PLAYER);
+  write(path.join(out, "src", "theme", "VideoDownload", "index.tsx"), VIDEO);
+  fs.rmSync(path.join(out, "src", "components"), { recursive: true, force: true }); // older exports put them here
 
   // Recording and video.
   write(path.join(out, "static", "recordings", `${name}.json`), fs.readFileSync(path.join(ROOT, "public", "recordings", `${name}.json`)));
@@ -171,7 +177,7 @@ export function exportGuide(name, out = DEFAULT_OUT) {
   const cat = path.join(dir, "_category_.json");
   if (!fs.existsSync(cat)) write(cat, JSON.stringify({ label: category, link: { type: "generated-index" } }, null, 2) + "\n");
   const page = path.join(dir, `${name}.mdx`);
-  write(page, pageFor(name, script, rec, video, { embed: false, by: "npm run docusaurus" }));
+  write(page, pageFor(name, script, rec, video, { embed: false, by: "npm run docusaurus", components: "@theme" }));
 
   // HOW-TO-ADD.md lists every guide in the folder.
   const guides = [];

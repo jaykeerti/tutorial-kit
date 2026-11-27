@@ -27,6 +27,12 @@ section("Scripts load");
     .filter((f) => f.endsWith(".mjs"))
     .filter((f) => spawnSync(process.execPath, ["--check", `scripts/${f}`]).status !== 0);
   check(bad.length === 0, `all scripts have valid syntax${bad.length ? ` — broken: ${bad.join(", ")}` : ""}`);
+  // The Docusaurus plugin builds to plain JavaScript (no TypeScript left), with the player inside.
+  const pb = spawnSync(process.execPath, ["scripts/plugin-build.mjs"]);
+  const lib = "packages/docusaurus-plugin-tutorial-kit/lib";
+  const files = ["index.js", "theme/TutorialPlayer/index.js", "theme/MDXComponents/index.js", "player/Tutorial.js", "player/RrwebClip.js", "player/Tutorial.css"];
+  const plain = files.every((f) => fs.existsSync(`${lib}/${f}`)) && !/: (string|number|boolean|Props)|import type /.test(fs.readFileSync(`${lib}/player/RrwebClip.js`, "utf8"));
+  check(pb.status === 0 && plain, `npm run plugin:build makes the plugin${pb.status === 0 ? "" : `: ${pb.stderr}`}`);
 }
 const temp = [];
 const writeTutorial = (name, obj) => {
@@ -630,13 +636,13 @@ ${await e.locator(".ed-log").innerText().catch(() => "")}`}`);
           () =>
             fs.existsSync(`${dx}/docs/guides/${name}.mdx`) &&
             fs.existsSync(`${dx}/static/recordings/${name}.json`) &&
-            fs.existsSync(`${dx}/src/components/TutorialPlayer/index.tsx`) &&
+            fs.existsSync(`${dx}/src/theme/TutorialPlayer/index.tsx`) &&
             fs.readFileSync(`${dx}/src/tutorial-kit/Tutorial.css`, "utf8").startsWith("/*") &&
             fs.readFileSync(`${dx}/HOW-TO-ADD.md`, "utf8").includes("npm install remotion@"),
           15000,
         );
         const dxPage = dxOk ? fs.readFileSync(`${dx}/docs/guides/${name}.mdx`, "utf8") : "";
-        check(dxOk && dxPage.includes("<TutorialPlayer") && !dxPage.includes("EmbedSnippet") && (await e.getByText("HOW-TO-ADD.md").isVisible()), "Export for Docusaurus makes the folder (page, recording, player, how-to)");
+        check(dxOk && dxPage.includes("<TutorialPlayer") && dxPage.includes("from '@theme/TutorialPlayer'") && !dxPage.includes("EmbedSnippet") && (await e.getByText("HOW-TO-ADD.md").isVisible()), "Export for Docusaurus makes the folder (page, recording, player, how-to)");
 
         // Import: the recording alone (a tutorial file is made from it), then with its tutorial file.
         const imp = "_edimp";
@@ -678,6 +684,90 @@ ${await e.locator(".ed-log").innerText().catch(() => "")}`}`);
       if (!guidesDirExisted) fs.rmSync("help-site/docs/guides", { recursive: true, force: true });
       if (!exportsExisted) fs.rmSync("exports", { recursive: true, force: true });
       await new Promise((resolve) => spawn(process.execPath, ["scripts/docs.mjs", "--rebuild-list"]).on("exit", resolve));
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // Studio: the editor running beside a Docusaurus site (tutorial-kit-studio, as installed from the
+  // .tgz). Records into a temporary "site" folder and checks everything lands where Docusaurus serves it.
+  section("Studio (inside a Docusaurus site)");
+  {
+    const { spawnSync } = await import("node:child_process");
+    const sb = spawnSync(process.execPath, ["scripts/studio-build.mjs"], { encoding: "utf8" });
+    check(sb.status === 0 && fs.existsSync("packages/tutorial-kit-studio/dist/editor/index.html"), `npm run studio:build makes the studio${sb.status === 0 ? "" : `: ${sb.stderr}`}`);
+    const site = fs.mkdtempSync(path.join(os.tmpdir(), "tk-site-"));
+    fs.writeFileSync(path.join(site, "package.json"), "{}\n");
+    fs.mkdirSync(path.join(site, "docs"));
+    const name = "_studio";
+    const sport = 5194;
+    const app = await createServer({ server: { port: 5195, strictPort: true }, logLevel: "silent" });
+    await app.listen();
+    // Its own process: the studio's folder settings must not leak into these tests.
+    const studio = spawn(process.execPath, ["packages/tutorial-kit-studio/dist/scripts/studio-server.mjs", site, String(sport)], { env: { ...process.env, TK_TEST_CDP_PORT: "9341" } });
+    let studioLog = "";
+    studio.stdout.on("data", (d) => (studioLog += d));
+    studio.stderr.on("data", (d) => (studioLog += d));
+    const until = async (fn, ms) => {
+      for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 250))) if (await fn()) return true;
+      return false;
+    };
+    const inSite = (...p) => path.join(site, ...p);
+    const browser = await chromium.launch({ channel: "chrome", headless: true });
+    let cdp;
+    try {
+      check(await until(() => studioLog.includes(`localhost:${sport}/edit`), 20000), `the studio starts${studioLog.includes("edit") ? "" : `: ${studioLog}`}`);
+      const e = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+      await e.goto(`http://localhost:${sport}/edit`);
+      const recordBtn = e.getByRole("button", { name: "● Record new" });
+      await recordBtn.waitFor({ timeout: 30000 });
+      if (!(await e.getByLabel("Page address").isVisible())) await recordBtn.click();
+      await e.getByLabel("Page address").fill("http://localhost:5195/harness.html?c=TestBench");
+      await e.getByLabel("Tutorial name").fill(name);
+      await e.getByRole("button", { name: "Open Chrome" }).click();
+      const startBtn = e.getByRole("button", { name: "● Start recording" });
+      if (await startBtn.waitFor({ timeout: 90000 }).then(() => true, () => false)) {
+        cdp = await chromium.connectOverCDP("http://127.0.0.1:9341");
+        const p = cdp.contexts().flatMap((c) => c.pages()).find((x) => x.url().includes("harness.html"));
+        await p.getByRole("button", { name: "Add part" }).waitFor();
+        await startBtn.click();
+        await e.getByText("Recording — step 1").waitFor({ timeout: 15000 });
+        await p.getByRole("button", { name: "Add part" }).click();
+        await until(async () => /step 1, [1-9]/.test(await e.locator(".ed-rec-status").innerText()), 10000);
+        await e.getByRole("button", { name: "■ Stop & save" }).click();
+      }
+      const page = inSite("docs", "guides", `${name}.mdx`);
+      const saved = await until(() => fs.existsSync(page), 120000);
+      check(
+        saved && fs.existsSync(inSite("static", "recordings", `${name}.json`)) && fs.existsSync(inSite("tutorials", `${name}.tutorial.json`)) && fs.readFileSync(page, "utf8").includes(`<TutorialPlayer name="${name}" />`),
+        `Studio: recording saves static/recordings/, tutorials/ and the page docs/guides/${name}.mdx${saved ? "" : `\n${studioLog.slice(-1500)}`}`,
+      );
+      check(fs.existsSync(inSite(".tutorial-kit", "auth", "localhost_5195.json")) && fs.readFileSync(inSite(".tutorial-kit", ".gitignore"), "utf8").includes("*"), "Studio: the login goes to .tutorial-kit/auth/, which git ignores");
+      await e.getByLabel("Step 1 title").waitFor({ timeout: 30000 });
+      check((await e.getByRole("button", { name: "Export for Docusaurus" }).count()) === 0 && (await e.getByRole("button", { name: "Add to help site" }).count()) === 0, "Studio: no copy-folder buttons (the page is updated on save)");
+      await e.getByLabel("Step 1 title").fill("Add a part");
+      await e.getByLabel("Sidebar group").fill("Parts");
+      await e.getByRole("button", { name: "Save", exact: true }).click();
+      const moved = inSite("docs", "parts", `${name}.mdx`);
+      check(
+        (await until(() => fs.existsSync(moved), 10000)) && fs.readFileSync(moved, "utf8").includes("### 1. Add a part") && !fs.existsSync(inSite("docs", "guides")),
+        "Studio: Save updates the page, and a new category moves it",
+      );
+      // A page you've edited by hand (marker line removed) is left alone.
+      fs.writeFileSync(moved, fs.readFileSync(moved, "utf8").replace("tutorial_kit: generated\n", "") + "\nMy own words.\n");
+      await e.getByLabel("Step 1 title").fill("Add one part");
+      await e.getByRole("button", { name: "Save", exact: true }).click();
+      await e.getByText(/left as it is/).waitFor({ timeout: 10000 }).catch(() => {});
+      check(fs.readFileSync(moved, "utf8").includes("My own words.") && !fs.readFileSync(moved, "utf8").includes("Add one part"), "Studio: a page edited by hand isn't overwritten");
+      // Cross-site requests are refused (another web page can't delete your guides).
+      const evil = await fetch(`http://localhost:${sport}/__tk/delete/${name}`, { method: "POST", headers: { Origin: "https://example.com" } });
+      check(evil.status === 403 && fs.existsSync(inSite("tutorials", `${name}.tutorial.json`)), "Studio: refuses requests from other web pages");
+    } finally {
+      await cdp?.close().catch(() => {});
+      await browser.close();
+      studio.kill();
+      await app.close();
+      await new Promise((r) => setTimeout(r, 500));
+      fs.rmSync(site, { recursive: true, force: true });
     }
   }
 
