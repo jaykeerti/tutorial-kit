@@ -105,7 +105,9 @@ export function Editor() {
   const [script, setScript] = useState<Script | null>(null);
   const [saved, setSaved] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string; undo?: () => void } | null>(null);
+  const nextNotice = useRef<typeof notice>(null); // shown once the next tutorial has loaded
+  const [deleting, setDeleting] = useState<string[] | null>(null); // files to confirm, when asking
   const [saving, setSaving] = useState(false);
   const [goto, setGoto] = useState<{ step: number; at: number; n: number }>();
   const [recordOpen, setRecordOpen] = useState(false);
@@ -129,7 +131,9 @@ export function Editor() {
     if (!name) return;
     let gone = false;
     setError("");
-    setNotice(null);
+    setNotice(nextNotice.current);
+    nextNotice.current = null;
+    setDeleting(null);
     Promise.all([
       api<{ script: Script }>(`tutorial/${encodeURIComponent(name)}`),
       fetch(`/recordings/${encodeURIComponent(name)}.json?${Date.now()}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`No recording for ${name}`)))),
@@ -230,6 +234,53 @@ export function Editor() {
     return () => ro.disconnect();
   }, []);
 
+  // Delete the tutorial: ask first (listing its files), then move them into deleted/ — with Undo.
+  const askDelete = async () => {
+    try {
+      const { files } = await api<{ files: string[] }>(`files/${encodeURIComponent(name)}`);
+      setDeleting(files);
+      scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message });
+    }
+  };
+  const doDelete = async () => {
+    const gone = name;
+    try {
+      const r = await api<{ folder: string }>(`delete/${encodeURIComponent(gone)}`, "POST", {});
+      const undo = async () => {
+        try {
+          await api(`restore/${encodeURIComponent(r.folder.replace(/^deleted\//, ""))}`, "POST", {});
+          nextNotice.current = { ok: true, text: `Restored “${gone}”.` };
+          const l = await api<{ name: string; title: string }[]>("tutorials");
+          setList(l);
+          setBase(null);
+          setScript(null);
+          setName(gone);
+        } catch (e) {
+          setNotice({ ok: false, text: `Couldn't restore: ${(e as Error).message}` });
+        }
+      };
+      const left = (await api<{ name: string; title: string }[]>("tutorials")).filter((t) => t.name !== gone);
+      const msg = { ok: true, text: `Deleted “${gone}”: its files were moved to ${r.folder}/.`, undo };
+      setDeleting(null);
+      setSaved("");
+      setBase(null);
+      setScript(null);
+      setList(left);
+      if (left.length) {
+        nextNotice.current = msg;
+        setName(left[0].name);
+      } else {
+        setName("");
+        setNotice(msg);
+        history.replaceState(null, "", "/edit");
+      }
+    } catch (e) {
+      setNotice({ ok: false, text: `Couldn't delete: ${(e as Error).message}` });
+    }
+  };
+
   const show = (step: number, at: number) => setGoto({ step, at: Math.max(0, Math.round(at)), n: Date.now() });
 
   return (
@@ -274,6 +325,11 @@ export function Editor() {
           <button type="button" className="ed-btn" disabled={!dirty} onClick={() => setScript(JSON.parse(saved))}>
             Undo changes
           </button>
+          {name && script && (
+            <button type="button" className="ed-btn ed-danger" onClick={askDelete}>
+              Delete tutorial
+            </button>
+          )}
           <button type="button" className="ed-btn ed-primary" disabled={!dirty || saving} onClick={save} title="Ctrl+S / ⌘S">
             {saving ? "Saving…" : "Save"}
           </button>
@@ -314,9 +370,41 @@ export function Editor() {
         />
       )}
       {error && <p className="ed-msg ed-bad">{error}</p>}
+      {deleting && (
+        <section className="ed-record ed-confirm" aria-label="Delete this tutorial">
+          <div className="ed-card-head">
+            <h2>Delete “{script?.title || name}”?</h2>
+          </div>
+          <p className="ed-hint">These files are moved to the project's <code>deleted/</code> folder (not erased — you can undo):</p>
+          <ul className="ed-picked">
+            {deleting.map((f) => (
+              <li key={f}>
+                <code>{f}</code>
+              </li>
+            ))}
+          </ul>
+          {dirty && <p className="ed-msg ed-bad">Your unsaved changes to it are lost.</p>}
+          <div className="ed-row ed-row-tight">
+            <button type="button" className="ed-btn ed-stop" onClick={doDelete}>
+              Delete tutorial
+            </button>
+            <button type="button" className="ed-btn" onClick={() => setDeleting(null)}>
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
       {notice && (
         <p className={notice.ok ? "ed-msg ed-good" : "ed-msg ed-bad"} role="status">
           {notice.text}
+          {notice.undo && (
+            <>
+              {" "}
+              <button type="button" className="ed-btn ed-small" onClick={notice.undo}>
+                Undo
+              </button>
+            </>
+          )}
         </p>
       )}
 

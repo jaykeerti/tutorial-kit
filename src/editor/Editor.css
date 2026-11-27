@@ -141,3 +141,6 @@
 .ed-action-deleted .ed-num { background: #e5e7eb; color: var(--ed-muted); margin-top: 2px; }
 .ed-gone { flex: 1; min-width: 0; color: var(--ed-muted); text-decoration: line-through; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ed-hint.ed-inline { margin: 0; flex: none; }
+
+/* delete tutorial */
+.ed-record.ed-confirm { border-color: #fca5a5; box-shadow: 0 6px 20px rgba(220, 38, 38, .08); }

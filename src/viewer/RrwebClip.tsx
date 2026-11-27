@@ -1,7 +1,7 @@
 // One tutorial step as a Remotion clip.
 // For every frame: work out the moment in the recording -> ask rrweb to show the page at that moment
 // -> draw our own smooth cursor on top, zoom the "camera" in around clicks, and show a caption.
-import React, { useLayoutEffect, useRef } from "react";
+import React, { useLayoutEffect, useMemo, useRef } from "react";
 import { AbsoluteFill, continueRender, delayRender, getRemotionEnvironment, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { Replayer } from "rrweb";
 import "rrweb/dist/style.css";
@@ -34,6 +34,17 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, zoomPoints = t
   const v = (frame / fps) * 1000; // time in the tutorial
   const t = realAt(s, v); // the moment in the recording to show
 
+  // Where each scrolled element (a page, a panel) was scrolled to, over time.
+  const scrolls = useMemo(() => {
+    const m = new Map<number, { t: number; x: number; y: number }[]>();
+    for (const e of rec.events as { type: number; timestamp: number; data?: { source?: number; id?: number; x?: number; y?: number } }[]) {
+      if (e.type !== 3 || e.data?.source !== 3 || e.data.id === undefined) continue;
+      if (!m.has(e.data.id)) m.set(e.data.id, []);
+      m.get(e.data.id)!.push({ t: e.timestamp, x: e.data.x ?? 0, y: e.data.y ?? 0 });
+    }
+    return m;
+  }, [rec.events]);
+
   // Build the rrweb replayer once per recording.
   useLayoutEffect(() => {
     const el = host.current!;
@@ -44,6 +55,9 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, zoomPoints = t
       showDebug: false,
       mouseTail: false,
       triggerFocus: true,
+      // rrweb's faster "virtual DOM" catch-up drops CSS rules that apps add as they run (MUI, emotion,
+      // styled-components) when a replay plays straight through — panels lost their height and couldn't scroll.
+      useVirtualDom: false,
       // We show each frame by pausing the replay at that moment, and rrweb freezes CSS animations
       // while paused — rows that fade in would stay invisible, spinners still. Keep them running.
       // (The id selector only raises specificity above rrweb's own rule.)
@@ -79,6 +93,25 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, zoomPoints = t
     const had = document.activeElement as HTMLElement | null;
     const typing = !rendering && !!had && (had.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(had.tagName)) && !host.current?.contains(had);
     r?.pause(t - t0);
+    // Jumping to a moment (how every frame of an exported video is made) can lose scroll positions:
+    // rrweb sets them before the page's styles make the panel scrollable. Set them again here.
+    if (r)
+      for (const [id, list] of scrolls) {
+        let last: (typeof list)[number] | undefined;
+        for (const q of list) if (q.t <= t) last = q;
+        else break;
+        const el = r.getMirror().getNode(id) as (Element & { defaultView?: Window }) | Document | null;
+        if (!el) continue;
+        const x = last?.x ?? 0;
+        const y = last?.y ?? 0;
+        if (el.nodeType === 9) {
+          const w = (el as Document).defaultView;
+          if (w && (w.scrollX !== x || w.scrollY !== y)) w.scrollTo({ left: x, top: y, behavior: "instant" as ScrollBehavior });
+        } else {
+          const e = el as Element;
+          if (Math.abs(e.scrollTop - y) > 1 || Math.abs(e.scrollLeft - x) > 1) e.scrollTo({ left: x, top: y, behavior: "instant" as ScrollBehavior });
+        }
+      }
     if (typing && had !== document.activeElement && had!.isConnected) had!.focus({ preventScroll: true });
     if (!rendering || !r) return;
     // Video export: wait for the page's images and fonts before this frame is taken.
@@ -88,7 +121,7 @@ export const RrwebClip: React.FC<ClipProps> = ({ rec, step, zoom, zoomPoints = t
     Promise.all([...imgs.map((i) => i.decode().catch(() => {})), doc?.fonts?.ready.catch(() => {})]).then(() =>
       requestAnimationFrame(() => continueRender(h)),
     );
-  }, [t, t0, rendering]);
+  }, [t, t0, rendering, scrolls]);
 
   const cursor = (vv: number) => (rec.cursor ? cursorAt(rec, realAt(s, vv)) : filmedCursorAt(rec, s, vv));
   const { x, y } = cursor(v);

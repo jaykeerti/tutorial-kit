@@ -151,6 +151,9 @@ npm run dev      →  http://localhost:5180/edit
 - **Delete step** / **✕** on an action: a deleted step is left out of the player, the video and the help site. A
   deleted action is cut out — the video jumps from just before it to the next action (what it changed on the page
   stays, e.g. typed text). Both stay listed, greyed out, with **Restore**; the recording itself isn't changed.
+- **Delete tutorial** (top bar): lists the tutorial's files — recording, tutorial file, videos, help site copy and
+  page — and after you confirm, moves them into `deleted/<name>-<date>/` (git ignores it). **Undo** in the message
+  puts them back; or move them back by hand later.
 - **Save** (Ctrl+S / ⌘S) writes `tutorials/<name>.tutorial.json` — the same file you can still edit by hand.
   **Undo changes** goes back to the last save.
 - **Video & help site**: WebM or MP4, title cards, size, zoom, captions and the step label → **Export video** (progress, a

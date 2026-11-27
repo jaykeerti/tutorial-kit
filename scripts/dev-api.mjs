@@ -7,11 +7,14 @@
 //   POST /__tk/record/<name>          record a new tutorial (npm run record), returns a job
 //   POST /__tk/command/<job id>       {"cmd": "start" | "next" | "stop"} for that recording
 //   POST /__tk/import/<name>          {"recording": …, "tutorial"?: …} add a recording made elsewhere
+//   GET  /__tk/files/<name>           the files that belong to a tutorial (shown before deleting)
+//   POST /__tk/delete/<name>          move them all into deleted/<name>-<date>/ (restorable)
+//   POST /__tk/restore/<folder>       move a deleted tutorial back
 //   GET  /__tk/job/<id>               how a job is going
 //   GET  /__tk/video/<file>           an exported video from videos/
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { applyTutorialFile } from "./apply.mjs";
 import { DEFAULT_SETTINGS, isRecording, isTutorialFile, scriptFromRecording } from "./script-core.mjs";
@@ -61,6 +64,32 @@ function list() {
     })
     .sort((a, b) => a.title.localeCompare(b.title));
 }
+
+/** Every file that belongs to a tutorial (paths relative to the project). */
+function filesOf(name) {
+  const out = [`tutorials/${name}.tutorial.json`, `public/recordings/${name}.json`];
+  for (const ext of ["webm", "mp4"]) out.push(`videos/${name}.${ext}`, `help-site/static/videos/${name}.${ext}`);
+  out.push(`help-site/static/recordings/${name}.json`);
+  const docs = at("help-site", "docs");
+  if (fs.existsSync(docs))
+    for (const d of fs.readdirSync(docs, { withFileTypes: true })) if (d.isDirectory()) out.push(`help-site/docs/${d.name}/${name}.mdx`);
+  return out.filter((f) => fs.existsSync(at(f)));
+}
+const moveFile = (from, to) => {
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  try {
+    fs.renameSync(from, to);
+  } catch {
+    fs.copyFileSync(from, to); // across drives
+    fs.rmSync(from);
+  }
+};
+// The help site's home page lists the guides: refresh it after a page goes or comes back.
+const rebuildGuideList = () => {
+  try {
+    execFileSync(process.execPath, [at("scripts", "docs.mjs"), "--rebuild-list"], { cwd: ROOT, stdio: "ignore" });
+  } catch {}
+};
 
 /** Run one of our scripts in the background and keep its output for /__tk/job/<id>. */
 function startJob(kind, args) {
@@ -137,6 +166,34 @@ export async function devApi(req, res, next) {
       const warnings = [];
       applyTutorialFile(name, { log: () => {}, warn: (m) => warnings.push(m) });
       return send(res, 200, { ok: true, warnings, madeTutorialFile: !tutorial });
+    }
+
+    if (what === "files" && req.method === "GET") return send(res, 200, { files: filesOf(name) });
+
+    if (what === "delete" && req.method === "POST") {
+      // Not erased: moved into deleted/<name>-<date>/, keeping their folders, so it can be undone.
+      if ([...jobs.values()].some((j) => j.running && j.name === name)) return send(res, 409, { error: "That tutorial is being recorded — stop first." });
+      const files = filesOf(name);
+      if (!files.length) return send(res, 404, { error: `No tutorial called "${name}"` });
+      const d = new Date();
+      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
+      const folder = `${name}-${stamp}`;
+      for (const f of files) moveFile(at(f), at("deleted", folder, f));
+      fs.writeFileSync(at("deleted", folder, "deleted.json"), JSON.stringify({ name, deleted: d.toISOString(), files }, null, 2) + "\n");
+      rebuildGuideList();
+      return send(res, 200, { ok: true, folder: `deleted/${folder}`, files });
+    }
+
+    if (what === "restore" && req.method === "POST") {
+      const dir = at("deleted", name);
+      const info = fs.existsSync(path.join(dir, "deleted.json")) ? JSON.parse(fs.readFileSync(path.join(dir, "deleted.json"), "utf8")) : null;
+      if (!info) return send(res, 404, { error: "Nothing to restore there." });
+      const clash = info.files.filter((f) => fs.existsSync(at(f)));
+      if (clash.length) return send(res, 409, { error: `Can't restore: ${clash.join(", ")} exists again (a new tutorial with the same name?).` });
+      for (const f of info.files) moveFile(path.join(dir, f), at(f));
+      fs.rmSync(dir, { recursive: true, force: true });
+      rebuildGuideList();
+      return send(res, 200, { ok: true, name: info.name });
     }
 
     if (what === "export" && req.method === "POST") {

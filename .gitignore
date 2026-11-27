@@ -15,3 +15,6 @@ help-site/.docusaurus/
 
 # videos from npm run export
 /videos/
+
+# tutorials deleted in the editor (restorable; move the files back by hand, or use Undo)
+/deleted/

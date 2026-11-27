@@ -597,6 +597,22 @@ ${recLog}`}`);
           "Restore brings them back",
         );
 
+        // Delete the whole tutorial (moved into deleted/), then Undo.
+        await e.getByRole("button", { name: "Delete tutorial" }).click();
+        const box = e.getByRole("region", { name: "Delete this tutorial" });
+        await box.waitFor();
+        const listed = await box.locator("code").allInnerTexts();
+        await box.getByRole("button", { name: "Delete tutorial" }).click();
+        const moved = await until(() => !fs.existsSync(`tutorials/${name}.tutorial.json`) && !fs.existsSync(`public/recordings/${name}.json`), 10000);
+        const kept = fs.existsSync("deleted") && fs.readdirSync("deleted").some((d) => d.startsWith(`${name}-`) && fs.existsSync(`deleted/${d}/tutorials/${name}.tutorial.json`));
+        check(listed.includes(`tutorials/${name}.tutorial.json`) && moved && kept, "Delete tutorial lists its files, then moves them into deleted/");
+        await e.getByRole("button", { name: "Undo", exact: true }).click();
+        check(
+          await until(() => fs.existsSync(`tutorials/${name}.tutorial.json`) && fs.existsSync(`public/recordings/${name}.json`), 10000) && !fs.readdirSync("deleted").some((d) => d.startsWith(`${name}-`)),
+          "Undo puts the tutorial back",
+        );
+        if (fs.existsSync("deleted") && !fs.readdirSync("deleted").length) fs.rmdirSync("deleted");
+
         await e.getByLabel("Title cards").uncheck();
         await e.getByLabel("Size").selectOption("0.5");
         await e.getByRole("button", { name: "Export video" }).click();
